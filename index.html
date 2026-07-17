@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>ウチかめ連動キャラ（セキュリティ突破版）</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; }
+        body { font-family: sans-serif; background-color: #f7f9fc; overflow: hidden; display: flex; flex-direction: column; align-items: center; justify-content: space-between; height: 100vh; padding: 20px; }
+        #character-container { flex-grow: 1; display: flex; align-items: center; justify-content: center; width: 100%; max-width: 400px; }
+        svg#character { width: 80%; height: auto; filter: drop-shadow(0 10px 15px rgba(0,0,0,0.1)); }
+        #controls { width: 100%; max-width: 400px; text-align: center; margin-bottom: 10px; z-index: 999; position: relative; }
+        .btn { display: inline-block; width: 100%; padding: 16px; background-color: #4f46e5; color: white; border: none; border-radius: 50px; font-size: 1.1rem; font-weight: bold; box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3); cursor: pointer; }
+        #status { margin-top: 8px; font-size: 0.9rem; color: #6b7280; }
+        #webcam { position: absolute; top: 16px; right: 16px; width: 80px; height: 80px; border-radius: 50%; object-fit: cover; border: 3px solid #fff; box-shadow: 0 4px 10px rgba(0,0,0,0.2); transform: scaleX(-1); z-index: 5; background-color: #000; display: none; }
+        #debug-log { width: 100%; max-width: 400px; max-height: 120px; overflow-y: auto; background: #e0f2f1; color: #00796b; font-family: monospace; font-size: 11px; padding: 10px; border-radius: 8px; border: 1px solid #b2dfdb; text-align: left; margin-bottom: 10px; white-space: pre-wrap; z-index: 1000; }
+    </style>
+    
+    <!-- ここがポイント！ ブロックされやすい import をやめ、普通のタグで読み込む -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
+</head>
+<body>
+
+    <video id="webcam" autoplay playsinline muted></video>
+
+    <div id="character-container">
+        <svg id="character" viewBox="0 0 200 200">
+            <g id="face-group" style="transform-origin: 100px 140px; transition: transform 0.05s ease-out;">
+                <circle cx="100" cy="100" r="70" fill="#FFE2C9" stroke="#4A3728" stroke-width="4" />
+                <circle cx="25" cy="100" r="12" fill="#FFE2C9" stroke="#4A3728" stroke-width="4" />
+                <circle cx="175" cy="100" r="12" fill="#FFE2C9" stroke="#4A3728" stroke-width="4" />
+                <path d="M 25 90 C 25 20, 175 20, 175 90 C 145 60, 55 60, 25 90 Z" fill="#4A3728" />
+                <g id="eye-left-group" style="transform-origin: 65px 95px;">
+                    <ellipse id="eye-left" cx="65" cy="95" rx="10" ry="14" fill="#333" />
+                    <circle cx="62" cy="90" r="4" fill="#fff" />
+                </g>
+                <g id="eye-right-group" style="transform-origin: 135px 95px;">
+                    <ellipse id="eye-right" cx="135" cy="95" rx="10" ry="14" fill="#333" />
+                    <circle cx="132" cy="90" r="4" fill="#fff" />
+                </g>
+                <circle cx="50" cy="115" r="8" fill="#FF8A8A" opacity="0.6" />
+                <circle cx="150" cy="115" r="8" fill="#FF8A8A" opacity="0.6" />
+                <path d="M 100 105 L 97 113 L 103 113 Z" fill="#DCA37A" />
+                <ellipse id="mouth" cx="100" cy="130" rx="12" ry="4" fill="#8b0000" stroke="#4A3728" stroke-width="2" />
+            </g>
+        </svg>
+    </div>
+
+    <div id="debug-log">System Loading...</div>
+
+    <div id="controls">
+        <button id="start-btn" class="btn">ウチかめ連動スタート！</button>
+        <p id="status">準備中...</p>
+    </div>
+
+    <script>
+        const logArea = document.getElementById("debug-log");
+        function reportError(type, message, error) {
+            logArea.style.background = "#ffcdd2";
+            logArea.style.color = "#c62828";
+            let details = error ? `\nDetail: ${error.message || error}` : "";
+            logArea.textContent = `[${type}]\n${message}${details}`;
+        }
+        window.onerror = function(msg, src, line, col, err) { reportError("Error", msg, err); return false; };
+        
+        // ページ読み込み完了時の処理
+        window.onload = () => {
+            if (typeof FaceMesh === 'undefined') {
+                reportError("Network Error", "スクリプトのダウンロード自体が遮断されました。");
+                return;
+            }
+            logArea.textContent = "AIライブラリ読み込み成功！\nボタンを押してください。";
+            
+            const startBtn = document.getElementById("start-btn");
+            const statusText = document.getElementById("status");
+            const videoElement = document.getElementById("webcam");
+            const faceGroup = document.getElementById("face-group");
+            const eyeLeftGroup = document.getElementById("eye-left-group");
+            const eyeRightGroup = document.getElementById("eye-right-group");
+            const mouth = document.getElementById("mouth");
+
+            let camera;
+
+            startBtn.addEventListener("click", async () => {
+                startBtn.disabled = true;
+                statusText.textContent = "カメラを起動しています...";
+                logArea.textContent = "カメラ接続中...";
+
+                try {
+                    // 旧式FaceMeshのセットアップ
+                    const faceMesh = new FaceMesh({locateFile: (file) => {
+                        return `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`;
+                    }});
+                    
+                    faceMesh.setOptions({
+                        maxNumFaces: 1,
+                        refineLandmarks: true,
+                        minDetectionConfidence: 0.5,
+                        minTrackingConfidence: 0.5
+                    });
+                    
+                    faceMesh.onResults(onResults);
+
+                    // カメラのセットアップ
+                    camera = new Camera(videoElement, {
+                        onFrame: async () => {
+                            await faceMesh.send({image: videoElement});
+                        },
+                        width: 640,
+                        height: 480
+                    });
+                    
+                    await camera.start();
+                    videoElement.style.display = "block";
+                    startBtn.style.display = "none";
+                    statusText.textContent = "連動中！お顔をカメラに向けてください";
+                    logArea.textContent = "連携成功！キャラが動きます。";
+
+                } catch (error) {
+                    reportError("Camera/AI Error", "起動に失敗しました", error);
+                    startBtn.disabled = false;
+                }
+            });
+
+            // 顔が検出されたときの処理（独自計算）
+            function onResults(results) {
+                if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
+                    const landmarks = results.multiFaceLandmarks[0];
+                    
+                    const pL = landmarks[33]; const pR = landmarks[263];
+                    const dx = pR.x - pL.x; const dy = pR.y - pL.y;
+                    const angleDeg = -Math.atan2(dy, dx) * (180 / Math.PI);
+
+                    const nose = landmarks[4];
+                    const midX = (pL.x + pR.x) / 2; const midY = (pL.y + pR.y) / 2;
+                    const eyeWidth = Math.sqrt(dx*dx + dy*dy);
+                    
+                    const yaw = (nose.x - midX) / eyeWidth;
+                    const pitch = (nose.y - midY) / eyeWidth - 0.2;
+
+                    // 顔の傾き
+                    faceGroup.style.transform = `translate(${yaw * -40}px, ${pitch * 40}px) rotate(${angleDeg}deg)`;
+
+                    // まばたきの計算（距離）
+                    const leftEyeDist = Math.sqrt((landmarks[159].x - landmarks[145].x)**2 + (landmarks[159].y - landmarks[145].y)**2);
+                    const rightEyeDist = Math.sqrt((landmarks[386].x - landmarks[374].x)**2 + (landmarks[386].y - landmarks[374].y)**2);
+                    const scaleYL = Math.min(1, Math.max(0.1, (leftEyeDist / eyeWidth) * 4.5));
+                    const scaleYR = Math.min(1, Math.max(0.1, (rightEyeDist / eyeWidth) * 4.5));
+
+                    eyeLeftGroup.style.transform = `scaleY(${scaleYL})`;
+                    eyeRightGroup.style.transform = `scaleY(${scaleYR})`;
+
+                    // 口の開閉計算（距離）
+                    const mouthDist = Math.sqrt((landmarks[13].x - landmarks[14].x)**2 + (landmarks[13].y - landmarks[14].y)**2);
+                    const jawOpen = Math.max(0, (mouthDist / eyeWidth) * 2.5);
+                    
+                    mouth.setAttribute("ry", 4 + jawOpen * 20);
+                }
+            }
+        };
+    </script>
+</body>
+</html>
