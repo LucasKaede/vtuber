@@ -3,25 +3,24 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Gachi 2.5D VTuber System</title>
+    <title>ASMR 2.5D VTuber - Ultimate Engine</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; }
-        body { font-family: 'Segoe UI', sans-serif; background: radial-gradient(circle at center, #1a1a2e 0%, #0f0f1a 100%); overflow: hidden; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; color: #fff; }
+        /* ASMR配信部屋風のダークでムーディーな背景 */
+        body { font-family: 'Segoe UI', sans-serif; background: radial-gradient(circle at 50% 40%, #2a2a35 0%, #0d0d12 100%); overflow: hidden; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; color: #fff; }
         
         #character-container { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 1; }
         
-        /* パーツごとの精密なトランジション（体の大きな動きと顔の微細な動きで速度を変える） */
-        svg#character { width: 100%; height: 100%; filter: drop-shadow(0 25px 40px rgba(0,0,0,0.6)); }
-        .head-layer { transition: transform 0.08s cubic-bezier(0.2, 0.8, 0.4, 1); }
-        .body-layer { transition: d 0.1s ease-out; } /* パスの動的変形用 */
-        .face-part { transition: all 0.05s ease-out; }
+        /* 物理演算とJSで制御するため、CSSのtransitionはあえて外す（遅延を防ぐため） */
+        svg#character { width: 100%; height: 100%; filter: drop-shadow(0 30px 50px rgba(0,0,0,0.8)); }
         
-        #controls { position: absolute; bottom: 30px; width: 100%; max-width: 400px; text-align: center; z-index: 999; }
-        .btn { display: inline-block; width: 90%; padding: 16px; background: rgba(138, 43, 226, 0.2); color: #d8a0ff; border: 1px solid #8a2be2; border-radius: 8px; font-size: 1.1rem; font-weight: bold; box-shadow: 0 0 20px rgba(138, 43, 226, 0.4); cursor: pointer; text-transform: uppercase; letter-spacing: 2px; backdrop-filter: blur(4px); }
-        .btn:active { background: rgba(138, 43, 226, 0.4); transform: scale(0.98); }
-        #status { margin-top: 10px; font-size: 0.9rem; color: #aaa; font-family: monospace; letter-spacing: 1px; }
+        #controls { position: absolute; bottom: 30px; width: 100%; max-width: 450px; text-align: center; z-index: 999; }
+        .btn { display: inline-block; width: 90%; padding: 16px; background: rgba(0, 212, 255, 0.1); color: #00d4ff; border: 1px solid #00d4ff; border-radius: 8px; font-size: 1.1rem; font-weight: bold; box-shadow: 0 0 20px rgba(0, 212, 255, 0.3); cursor: pointer; text-transform: uppercase; letter-spacing: 2px; backdrop-filter: blur(5px); }
+        .btn:active { background: rgba(0, 212, 255, 0.3); transform: scale(0.98); }
         
-        #webcam { position: absolute; top: 20px; right: 20px; width: 90px; height: 120px; object-fit: cover; border: 2px solid #8a2be2; border-radius: 8px; transform: scaleX(-1); z-index: 5; opacity: 0.5; display: none; }
+        .debug-panel { margin-top: 10px; padding: 10px; background: rgba(0,0,0,0.5); border-radius: 8px; font-size: 0.75rem; color: #00d4ff; font-family: monospace; text-align: left; line-height: 1.4; display: flex; justify-content: space-between; }
+        
+        #webcam { position: absolute; top: 20px; right: 20px; width: 80px; height: 100px; object-fit: cover; border: 1px solid #00d4ff; border-radius: 8px; transform: scaleX(-1); z-index: 5; opacity: 0.3; pointer-events: none; }
     </style>
     
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
@@ -32,345 +31,354 @@
     <video id="webcam" autoplay playsinline muted></video>
 
     <div id="character-container">
-        <!-- 描画領域を広く取り、全身の動きをカバー -->
         <svg id="character" viewBox="-600 -500 1200 1200">
             <defs>
-                <!-- 肌のグラデーション（立体感） -->
                 <linearGradient id="skin" x1="0%" y1="0%" x2="0%" y2="100%">
                     <stop offset="0%" stop-color="#FFF2EA" />
-                    <stop offset="70%" stop-color="#FCE1D0" />
-                    <stop offset="100%" stop-color="#DCA88D" />
+                    <stop offset="60%" stop-color="#FCE1D0" />
+                    <stop offset="100%" stop-color="#CFA188" />
                 </linearGradient>
-                <!-- 髪のグラデーション（天使の輪ハイライト入り） -->
                 <linearGradient id="hair" x1="0%" y1="0%" x2="0%" y2="100%">
-                    <stop offset="0%" stop-color="#2D2E40" />
-                    <stop offset="30%" stop-color="#4A4C6A" />
-                    <stop offset="40%" stop-color="#5C5F85" />
-                    <stop offset="60%" stop-color="#2D2E40" />
-                    <stop offset="100%" stop-color="#181925" />
+                    <stop offset="0%" stop-color="#DCDDE1" />
+                    <stop offset="40%" stop-color="#718093" />
+                    <stop offset="100%" stop-color="#2F3640" />
                 </linearGradient>
-                <!-- 服の質感 -->
-                <linearGradient id="jacket" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" stop-color="#1A1A1A" />
-                    <stop offset="100%" stop-color="#333333" />
-                </linearGradient>
-
-                <!-- 目のクリッピングマスク（白目の範囲外に瞳が出ないようにするガチ仕様） -->
-                <clipPath id="eyeClipL">
-                    <path d="M -100 -10 Q -60 -35 -20 -10 Q -60 10 -100 -10 Z" />
-                </clipPath>
-                <clipPath id="eyeClipR">
-                    <path d="M 20 -10 Q 60 -35 100 -10 Q 60 10 20 -10 Z" />
-                </clipPath>
+                <radialGradient id="blush" cx="50%" cy="50%" r="50%">
+                    <stop offset="0%" stop-color="rgba(255,100,100,0.4)" />
+                    <stop offset="100%" stop-color="rgba(255,100,100,0)" />
+                </radialGradient>
+                <clipPath id="eyeClipL"><path id="eyePathL" d="M -110 -15 Q -60 -45 -10 -15 Q -60 15 -110 -15 Z" /></clipPath>
+                <clipPath id="eyeClipR"><path id="eyePathR" d="M 10 -15 Q 60 -45 110 -15 Q 60 15 10 -15 Z" /></clipPath>
             </defs>
 
-            <!-- 【動的ボディレイヤー】AIの肩・肘・腰の座標に合わせてパスを毎フレーム再生成する -->
-            <g id="dynamic-body" opacity="0">
-                <!-- 胴体（肩から腰） -->
-                <path id="torso" fill="url(#jacket)" stroke="#000" stroke-width="4" stroke-linejoin="round"/>
-                <!-- インナーシャツ -->
-                <path id="inner-shirt" fill="#EEEEEE" />
-                <!-- 腕（肩から手首） -->
-                <path id="arm-L" fill="none" stroke="url(#jacket)" stroke-width="70" stroke-linecap="round" stroke-linejoin="round" />
-                <path id="arm-R" fill="none" stroke="url(#jacket)" stroke-width="70" stroke-linecap="round" stroke-linejoin="round" />
+            <!-- 1. 動的ボディ・腕 -->
+            <g id="dynamic-body">
+                <!-- 胸の呼吸による拡大縮小を適用 -->
+                <g id="breathing-chest">
+                    <path id="torso" fill="#1A1A1A" stroke="#111" stroke-width="4" stroke-linejoin="round"/>
+                    <path id="inner-shirt" fill="#F5F6FA" />
+                    <path id="collar" d="M -70 120 L 0 170 L 70 120 L 50 100 L 0 140 L -50 100 Z" fill="#2F3640" />
+                </g>
+                <path id="arm-L" fill="none" stroke="#1A1A1A" stroke-width="75" stroke-linecap="round" stroke-linejoin="round" />
+                <path id="arm-R" fill="none" stroke="#1A1A1A" stroke-width="75" stroke-linecap="round" stroke-linejoin="round" />
             </g>
 
-            <!-- 【頭部レイヤー】 -->
-            <g id="head-group" class="head-layer">
-                
+            <!-- 2. 頭部ベース -->
+            <g id="head-group">
                 <!-- 後ろ髪 -->
-                <g id="layer-back" class="head-layer">
-                    <path d="M -160 0 C -180 -150, 180 -150, 160 0 L 190 120 L 130 90 L 160 160 L 90 120 L 0 150 L -90 120 L -160 160 L -130 90 L -190 120 Z" fill="url(#hair)" />
-                    <!-- 首（顎の影を強く落とす） -->
-                    <path d="M -35 80 L -45 180 L 45 180 L 35 80 Z" fill="#B3806B" />
+                <g id="layer-back">
+                    <path d="M -150 -50 C -200 -200, 200 -200, 150 -50 L 190 120 L 120 70 L 150 160 L 80 110 L 0 150 L -80 110 L -150 160 L -120 70 L -190 120 Z" fill="url(#hair)" />
+                    <path d="M -30 70 L -45 160 L 45 160 L 30 70 Z" fill="#A47B68" />
                     <!-- 耳 -->
-                    <path d="M -110 20 C -140 10, -140 70, -110 80 Z" fill="#E5C7B3" />
-                    <path d="M 110 20 C 140 10, 140 70, 110 80 Z" fill="#E5C7B3" />
+                    <path d="M -100 0 C -140 -10, -140 70, -100 80 Z" fill="#FCE1D0" />
+                    <path d="M 100 0 C 140 -10, 140 70, 100 80 Z" fill="#FCE1D0" />
                 </g>
 
-                <!-- 顔のベース（精密なアゴのラインと影） -->
-                <g id="layer-mid" class="head-layer">
-                    <!-- 輪郭（頬骨から顎にかけてのシャープなカーブ） -->
-                    <path d="M -110 -30 L -115 30 Q -105 110 -40 150 Q 0 180 0 180 Q 0 180 40 150 Q 105 110 115 30 L 110 -30 Z" fill="url(#skin)" />
-                    <!-- 顎の立体感シャドウ -->
-                    <path d="M -100 60 Q -50 140 0 160 Q 50 140 100 60 Q 115 110 40 150 Q 0 180 0 180 Q 0 180 -40 150 Q -115 110 -100 60 Z" fill="rgba(0,0,0,0.08)" />
+                <!-- 顔の輪郭（ASMRイケメン特有の超鋭角アゴ） -->
+                <g id="layer-mid">
+                    <path d="M -105 -50 L -105 10 L -90 80 L -30 140 Q 0 165 0 165 Q 0 165 30 140 L 90 80 L 105 10 L 105 -50 Z" fill="url(#skin)" />
+                    <!-- 顎と首の境界の影 -->
+                    <path d="M -90 80 L -30 140 Q 0 165 0 165 Q 0 165 30 140 L 90 80 Q 40 120 0 120 Q -40 120 -90 80 Z" fill="rgba(0,0,0,0.1)" />
+                    <!-- ASMRの照れ頬 -->
+                    <circle cx="-60" cy="40" r="35" fill="url(#blush)" />
+                    <circle cx="60" cy="40" r="35" fill="url(#blush)" />
                 </g>
 
-                <!-- 顔のパーツ -->
-                <g id="layer-front" class="head-layer">
-                    
-                    <!-- 左目（クリッピング実装済） -->
-                    <g id="eye-L-group" class="face-part">
-                        <!-- 白目 -->
-                        <path id="eyeWhiteL" d="M -100 -10 Q -60 -35 -20 -10 Q -60 10 -100 -10 Z" fill="#FFFFFF" />
-                        <!-- 瞳（白目の中だけ表示される） -->
+                <!-- 前髪（通常は一番手前だが、今回は目の【裏側】に配置し、目にかかるようにする） -->
+                <g id="layer-hair-front">
+                    <!-- センター分け/マッシュ系の前髪 -->
+                    <path d="M -110 -50 Q -90 -10 -40 50 Q -30 0 0 -30 Q 30 0 40 50 Q 90 -10 110 -50 Q 140 -150 0 -180 Q -140 -150 -110 -50 Z" fill="url(#hair)" />
+                    <!-- 目に被さる細かい毛束（透過） -->
+                    <path d="M -60 -30 Q -40 30 -20 60 Q -25 10 -10 -20 Z" fill="url(#hair)" opacity="0.85" />
+                    <path d="M 60 -30 Q 40 30 20 60 Q 25 10 10 -20 Z" fill="url(#hair)" opacity="0.85" />
+                    <!-- 横髪 -->
+                    <path d="M -105 -30 Q -140 60 -100 150 Q -90 70 -95 -10 Z" fill="url(#hair)" />
+                    <path d="M 105 -30 Q 140 60 100 150 Q 90 70 95 -10 Z" fill="url(#hair)" />
+                </g>
+
+                <!-- 【最前面】顔のパーツ（髪の毛より手前に描画＝前髪透けの完成！） -->
+                <g id="layer-front">
+                    <!-- 左目 -->
+                    <g id="eye-L-group">
+                        <use href="#eyePathL" fill="#FFFFFF" />
                         <g clip-path="url(#eyeClipL)">
-                            <ellipse id="irisL" cx="-60" cy="-12" rx="16" ry="22" fill="#8A2BE2" />
-                            <circle id="pupilL" cx="-60" cy="-12" r="7" fill="#4B0082" />
-                            <circle id="highL1" cx="-65" cy="-22" r="5" fill="#FFFFFF" />
-                            <circle id="highL2" cx="-52" cy="-4" r="3" fill="#E0B0FF" />
+                            <ellipse id="irisL" cx="-60" cy="-15" rx="18" ry="24" fill="#00d4ff" />
+                            <circle id="pupilL" cx="-60" cy="-15" r="8" fill="#003a55" />
+                            <!-- 潤んだハイライト -->
+                            <circle id="highL1" cx="-68" cy="-25" r="5" fill="#FFFFFF" />
+                            <circle id="highL2" cx="-50" cy="-5" r="4" fill="rgba(255,255,255,0.7)" />
                         </g>
-                        <!-- まつげ（太いアイライン） -->
-                        <path id="eyelashL" d="M -110 -5 Q -60 -45 -10 -5" fill="none" stroke="#181925" stroke-width="12" stroke-linecap="round" />
-                        <!-- ふたえの線 -->
-                        <path d="M -90 -30 Q -60 -45 -30 -30" fill="none" stroke="#A67B66" stroke-width="2" />
+                        <!-- 二重の線と極太まつげ -->
+                        <path id="eyelashL" d="M -115 -10 Q -60 -50 -5 -10" fill="none" stroke="#222" stroke-width="10" stroke-linecap="round" />
+                        <path id="doubleL" d="M -90 -35 Q -60 -50 -30 -35" fill="none" stroke="#A47B68" stroke-width="2" />
                     </g>
 
                     <!-- 右目 -->
-                    <g id="eye-R-group" class="face-part">
-                        <path id="eyeWhiteR" d="M 20 -10 Q 60 -35 100 -10 Q 60 10 20 -10 Z" fill="#FFFFFF" />
+                    <g id="eye-R-group">
+                        <use href="#eyePathR" fill="#FFFFFF" />
                         <g clip-path="url(#eyeClipR)">
-                            <ellipse id="irisR" cx="60" cy="-12" rx="16" ry="22" fill="#8A2BE2" />
-                            <circle id="pupilR" cx="60" cy="-12" r="7" fill="#4B0082" />
-                            <circle id="highR1" cx="55" cy="-22" r="5" fill="#FFFFFF" />
-                            <circle id="highR2" cx="68" cy="-4" r="3" fill="#E0B0FF" />
+                            <ellipse id="irisR" cx="60" cy="-15" rx="18" ry="24" fill="#00d4ff" />
+                            <circle id="pupilR" cx="60" cy="-15" r="8" fill="#003a55" />
+                            <circle id="highR1" cx="52" cy="-25" r="5" fill="#FFFFFF" />
+                            <circle id="highR2" cx="70" cy="-5" r="4" fill="rgba(255,255,255,0.7)" />
                         </g>
-                        <path id="eyelashR" d="M 10 -5 Q 60 -45 110 -5" fill="none" stroke="#181925" stroke-width="12" stroke-linecap="round" />
-                        <path d="M 30 -30 Q 60 -45 90 -30" fill="none" stroke="#A67B66" stroke-width="2" />
+                        <path id="eyelashR" d="M 5 -10 Q 60 -50 115 -10" fill="none" stroke="#222" stroke-width="10" stroke-linecap="round" />
+                        <path id="doubleR" d="M 30 -35 Q 60 -50 90 -35" fill="none" stroke="#A47B68" stroke-width="2" />
                     </g>
 
-                    <!-- 眉毛 -->
-                    <path id="brow-L" class="face-part" d="M -100 -55 Q -60 -65 -20 -50" fill="none" stroke="#2D2E40" stroke-width="8" stroke-linecap="round" />
-                    <path id="brow-R" class="face-part" d="M 20 -50 Q 60 -65 100 -55" fill="none" stroke="#2D2E40" stroke-width="8" stroke-linecap="round" />
+                    <!-- 眉毛（形を変形させるため細かく制御） -->
+                    <path id="brow-L" d="M -100 -60 Q -60 -70 -20 -55" fill="none" stroke="#333" stroke-width="6" stroke-linecap="round" />
+                    <path id="brow-R" d="M 20 -55 Q 60 -70 100 -60" fill="none" stroke="#333" stroke-width="6" stroke-linecap="round" />
 
                     <!-- 鼻 -->
-                    <path id="nose" class="face-part" d="M -4 30 L -8 60 L 2 65 L 8 58" fill="none" stroke="#C59F89" stroke-width="3" stroke-linejoin="round" />
+                    <path id="nose" d="M -2 30 L -6 65 L 2 70 L 6 60" fill="none" stroke="#BA8A74" stroke-width="3" stroke-linejoin="round" />
 
-                    <!-- 口（上唇・下唇・歯・口内を分けたガチ仕様） -->
-                    <g id="mouth-group" class="face-part">
-                        <path id="mouth-inner" d="M -30 100 Q 0 100 30 100 Q 0 100 -30 100 Z" fill="#8B0000" />
-                        <path id="teeth" d="M -20 100 Q 0 100 20 100 Q 0 100 -20 100 Z" fill="#FFFFFF" />
-                        <path id="lip-line" d="M -35 100 Q 0 100 35 100" fill="none" stroke="#AA6E5D" stroke-width="3" stroke-linecap="round" />
+                    <!-- 口（歯・舌・アシンメトリー対応） -->
+                    <g id="mouth-group">
+                        <path id="mouth-inner" d="M -30 105 Q 0 105 30 105 Q 0 105 -30 105 Z" fill="#601A24" />
+                        <path id="teeth" d="M -20 105 Q 0 105 20 105 Q 0 105 -20 105 Z" fill="#FFFFFF" />
+                        <path id="tongue" d="M -15 105 Q 0 105 15 105 Q 0 105 -15 105 Z" fill="#E8748A" />
+                        <path id="lip-line" d="M -35 105 Q 0 105 35 105" fill="none" stroke="#A86E60" stroke-width="3" stroke-linecap="round" />
                     </g>
                 </g>
-
-                <!-- 前髪（多数の房で構成し、風に揺れるような束感） -->
-                <g id="layer-top" class="head-layer">
-                    <path d="M -120 -50 Q -80 -20 -60 40 Q -50 -10 -10 -20 Q 20 50 40 -10 Q 80 -10 120 30 Q 100 -40 120 -80 C 120 -180, -120 -180, -120 -80 Z" fill="url(#hair)" />
-                    <!-- アホ毛 -->
-                    <path d="M -10 -150 C -40 -200, 30 -220, 60 -180 C 40 -200, 10 -180, 0 -140 Z" fill="#2D2E40" />
-                    <!-- もみあげ（顔の横を覆う） -->
-                    <path d="M -115 -20 Q -130 50 -100 130 Q -95 50 -100 -10 Z" fill="url(#hair)" />
-                    <path d="M 115 -20 Q 130 50 100 130 Q 95 50 100 -10 Z" fill="url(#hair)" />
-                </g>
+                
+                <!-- 【物理演算レイヤー】揺れるアホ毛 -->
+                <path id="physics-hair" d="M 0 -160 C -40 -230, 40 -260, 80 -200 C 50 -220, 20 -200, 10 -160 Z" fill="#2F3640" />
             </g>
 
-            <!-- 【ダイナミック・ハンドレイヤー】指先 -->
             <g id="hands-group">
-                <g id="hand-left" class="body-layer" opacity="0">
-                    <path id="fingers-L" fill="none" stroke="url(#skin)" stroke-width="26" stroke-linecap="round" stroke-linejoin="round" />
-                </g>
-                <g id="hand-right" class="body-layer" opacity="0">
-                    <path id="fingers-R" fill="none" stroke="url(#skin)" stroke-width="26" stroke-linecap="round" stroke-linejoin="round" />
-                </g>
+                <path id="fingers-L" fill="none" stroke="url(#skin)" stroke-width="26" stroke-linecap="round" stroke-linejoin="round" />
+                <path id="fingers-R" fill="none" stroke="url(#skin)" stroke-width="26" stroke-linecap="round" stroke-linejoin="round" />
             </g>
         </svg>
     </div>
 
     <div id="controls">
-        <button id="start-btn" class="btn">Initialize True-VTuber System</button>
-        <p id="status">Waiting for link...</p>
+        <button id="start-btn" class="btn">Start Deep Sync Engine</button>
+        <div class="debug-panel">
+            <div id="param1">EAR: 0.00<br>JAW: 0.00<br>SMILE: 0.00</div>
+            <div id="param2">PITCH: 0.00<br>YAW: 0.00<br>ROLL: 0.00</div>
+            <div id="param3">PHYSICS_X: 0.00<br>BREATH: 0.00</div>
+        </div>
     </div>
 
     <script>
+        // =====================================
+        // 高度な物理演算（Jiggle Physics）クラス
+        // =====================================
+        class SpringPhysics {
+            constructor(stiffness = 0.1, dampening = 0.8) {
+                this.value = 0;
+                this.target = 0;
+                this.velocity = 0;
+                this.stiffness = stiffness;
+                this.dampening = dampening;
+            }
+            update(targetValue) {
+                this.target = targetValue;
+                const force = (this.target - this.value) * this.stiffness;
+                this.velocity += force;
+                this.velocity *= this.dampening;
+                this.value += this.velocity;
+                return this.value;
+            }
+        }
+
         window.onload = () => {
             const startBtn = document.getElementById("start-btn");
-            const statusText = document.getElementById("status");
-            const videoElement = document.getElementById("webcam");
+            const video = document.getElementById("webcam");
             
-            // レイヤー＆パーツ取得
+            // SVGパーツ群
             const headGroup = document.getElementById("head-group");
             const layerBack = document.getElementById("layer-back");
             const layerMid = document.getElementById("layer-mid");
             const layerFront = document.getElementById("layer-front");
-            const layerTop = document.getElementById("layer-top");
+            const layerHairFront = document.getElementById("layer-hair-front");
+            const physicsHair = document.getElementById("physics-hair");
             
-            const dynamicBody = document.getElementById("dynamic-body");
             const torso = document.getElementById("torso");
             const innerShirt = document.getElementById("inner-shirt");
+            const collar = document.getElementById("collar");
             const armL = document.getElementById("arm-L");
             const armR = document.getElementById("arm-R");
-            
-            const eyeGroupL = document.getElementById("eye-L-group");
-            const eyeGroupR = document.getElementById("eye-R-group");
-            const irisL = document.getElementById("irisL");
-            const irisR = document.getElementById("irisR");
-            const eyelashL = document.getElementById("eyelashL");
-            const eyelashR = document.getElementById("eyelashR");
-            
+            const chestGroup = document.getElementById("breathing-chest");
+
+            const eyePathL = document.getElementById("eyePathL");
+            const eyePathR = document.getElementById("eyePathR");
+            const irisL = document.getElementById("irisL"); const irisR = document.getElementById("irisR");
+            const pupilL = document.getElementById("pupilL"); const pupilR = document.getElementById("pupilR");
+            const eyelashL = document.getElementById("eyelashL"); const eyelashR = document.getElementById("eyelashR");
+            const doubleL = document.getElementById("doubleL"); const doubleR = document.getElementById("doubleR");
+
+            const browL = document.getElementById("brow-L"); const browR = document.getElementById("brow-R");
             const mouthInner = document.getElementById("mouth-inner");
             const teeth = document.getElementById("teeth");
+            const tongue = document.getElementById("tongue");
             const lipLine = document.getElementById("lip-line");
-            
-            const browL = document.getElementById("brow-L");
-            const browR = document.getElementById("brow-R");
 
-            const handLeftGroup = document.getElementById("hand-left");
-            const handRightGroup = document.getElementById("hand-right");
             const fingersL = document.getElementById("fingers-L");
             const fingersR = document.getElementById("fingers-R");
 
-            let camera;
+            // デバッグ表示用
+            const p1 = document.getElementById("param1");
+            const p2 = document.getElementById("param2");
+            const p3 = document.getElementById("param3");
+
+            // スムージング用変数
+            let curYaw=0, curPitch=0, curRoll=0;
+            const hairPhysicsX = new SpringPhysics(0.05, 0.85); // ふんわり揺れる設定
+            const hairPhysicsY = new SpringPhysics(0.05, 0.85);
 
             startBtn.addEventListener("click", async () => {
-                startBtn.disabled = true;
-                statusText.textContent = "Loading 543 Parameters...";
+                startBtn.disabled = true; startBtn.textContent = "Linking Neural Network...";
 
                 try {
-                    const holistic = new Holistic({locateFile: (file) => {
-                        return `https://cdn.jsdelivr.net/npm/@mediapipe/holistic/${file}`;
-                    }});
-                    
+                    const holistic = new Holistic({locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/holistic/${f}`});
                     holistic.setOptions({
-                        modelComplexity: 1,
-                        smoothLandmarks: true,
-                        refineFaceLandmarks: true,
-                        minDetectionConfidence: 0.5,
-                        minTrackingConfidence: 0.5
+                        modelComplexity: 1, smoothLandmarks: true, refineFaceLandmarks: true,
+                        minDetectionConfidence: 0.6, minTrackingConfidence: 0.6
                     });
                     holistic.onResults(onResults);
 
-                    camera = new Camera(videoElement, {
-                        onFrame: async () => { await holistic.send({image: videoElement}); },
-                        width: 480, height: 640
-                    });
-                    
+                    const camera = new Camera(video, { onFrame: async () => { await holistic.send({image: video}); }, width: 480, height: 640 });
                     await camera.start();
-                    videoElement.style.display = "block";
+                    video.style.display = "block";
                     startBtn.style.display = "none";
-                    statusText.textContent = "Tracking Active.";
-
                 } catch (error) {
-                    statusText.textContent = "Camera Access Denied.";
-                    startBtn.disabled = false;
+                    startBtn.textContent = "Camera Error"; startBtn.disabled = false;
                 }
             });
 
-            // 便利関数
             function getDist(p1, p2) { return Math.hypot(p1.x - p2.x, p1.y - p2.y); }
-            function getEAR(lms, top, bottom, left, right) { return getDist(lms[top], lms[bottom]) / getDist(lms[left], lms[right]); }
-            
-            // 座標変換関数（カメラの[0,1]をSVGのピクセル座標に変換。鼻を中心とする）
             const SCALE = 1600;
-            function toSVG(pt, nose) {
-                return {
-                    x: -(pt.x - nose.x) * SCALE,
-                    y: (pt.y - nose.y) * SCALE
-                };
-            }
+            function toSVG(pt, nose) { return { x: -(pt.x - nose.x) * SCALE, y: (pt.y - nose.y) * SCALE }; }
 
             function onResults(results) {
                 const nose = results.faceLandmarks ? results.faceLandmarks[1] : {x: 0.5, y: 0.5};
 
-                // =====================================
-                // 1. ダイナミック・ボディ＆アーム（腕・体）
-                // =====================================
+                // --- 1. 呼吸アニメーション（ASMR機能） ---
+                const time = Date.now() * 0.0015;
+                const breath = Math.sin(time); // -1.0 to 1.0
+                chestGroup.style.transform = `scaleY(${1 + breath * 0.015})`; // 胸が膨らむ
+                const breathHeadY = breath * 2; // 頭がわずかに上下する
+
+                // --- 2. 胴体・腕 ---
                 if (results.poseLandmarks) {
-                    dynamicBody.setAttribute("opacity", "1");
                     const p = results.poseLandmarks;
-                    
-                    // 肩・肘・手首・腰の座標をSVG用に変換
-                    const sL = toSVG(p[11], nose); const sR = toSVG(p[12], nose); // 肩
-                    const eL = toSVG(p[13], nose); const eR = toSVG(p[14], nose); // 肘
-                    const wL = toSVG(p[15], nose); const wR = toSVG(p[16], nose); // 手首
-                    const hL = toSVG(p[23], nose); const hR = toSVG(p[24], nose); // 腰
+                    const sL = toSVG(p[11], nose); const sR = toSVG(p[12], nose);
+                    const eL = toSVG(p[13], nose); const eR = toSVG(p[14], nose);
+                    const wL = toSVG(p[15], nose); const wR = toSVG(p[16], nose);
+                    const hL = toSVG(p[23], nose); const hR = toSVG(p[24], nose);
 
-                    // 画面外の腰の座標を予測補完（見えなくても体を描画するため）
                     const hipY = Math.max(sL.y, sR.y) + 500;
-                    const finalHL = p[23].visibility > 0.5 ? hL : { x: sL.x - 50, y: hipY };
-                    const finalHR = p[24].visibility > 0.5 ? hR : { x: sR.x + 50, y: hipY };
+                    const fHL = p[23].visibility > 0.5 ? hL : { x: sL.x - 60, y: hipY };
+                    const fHR = p[24].visibility > 0.5 ? hR : { x: sR.x + 60, y: hipY };
 
-                    // 胴体のポリゴンをリアルタイム生成
-                    torso.setAttribute("d", `M ${sL.x} ${sL.y} L ${sR.x} ${sR.y} L ${finalHR.x} ${finalHR.y} L ${finalHL.x} ${finalHL.y} Z`);
-                    // Vネックインナー
-                    innerShirt.setAttribute("d", `M ${sL.x} ${sL.y} L ${(sL.x+sR.x)/2} ${(sL.y+sR.y)/2 + 150} L ${sR.x} ${sR.y} Z`);
-
-                    // 腕の線を結ぶ（肩 → 肘 → 手首）
+                    torso.setAttribute("d", `M ${sL.x} ${sL.y} L ${sR.x} ${sR.y} L ${fHR.x} ${fHR.y} L ${fHL.x} ${fHL.y} Z`);
+                    innerShirt.setAttribute("d", `M ${sL.x} ${sL.y} L ${(sL.x+sR.x)/2} ${(sL.y+sR.y)/2 + 180} L ${sR.x} ${sR.y} Z`);
+                    collar.setAttribute("d", `M ${sL.x+20} ${sL.y-10} L ${(sL.x+sR.x)/2} ${(sL.y+sR.y)/2 + 40} L ${sR.x-20} ${sR.y-10} Z`);
+                    
                     armL.setAttribute("d", `M ${sL.x} ${sL.y} L ${eL.x} ${eL.y} L ${wL.x} ${wL.y}`);
                     armR.setAttribute("d", `M ${sR.x} ${sR.y} L ${eR.x} ${eR.y} L ${wR.x} ${wR.y}`);
                 }
 
-                // =====================================
-                // 2. 指のトラッキング
-                // =====================================
-                const drawFingers = (handLms) => {
-                    const pts = handLms.map(pt => toSVG(pt, nose));
-                    const fingers = [[0,1,2,3,4], [0,5,6,7,8], [9,10,11,12], [13,14,15,16], [17,18,19,20]];
-                    let d = `M ${pts[0].x} ${pts[0].y} L ${pts[5].x} ${pts[5].y} L ${pts[9].x} ${pts[9].y} L ${pts[13].x} ${pts[13].y} L ${pts[17].x} ${pts[17].y} Z `;
-                    fingers.forEach(f => {
-                        d += `M ${pts[f[0]].x} ${pts[f[0]].y} `;
-                        for(let i=1; i < f.length; i++) d += `L ${pts[f[i]].x} ${pts[f[i]].y} `;
-                    });
+                // --- 3. 手指 ---
+                const drawF = (lms) => {
+                    const pts = lms.map(pt => toSVG(pt, nose));
+                    const f = [[0,1,2,3,4], [0,5,6,7,8], [9,10,11,12], [13,14,15,16], [17,18,19,20]];
+                    let d = `M ${pts[0].x} ${pts[0].y} `;
+                    f.forEach(fi => { d += `M ${pts[fi[0]].x} ${pts[fi[0]].y} `; for(let i=1; i<fi.length; i++) d += `L ${pts[fi[i]].x} ${pts[fi[i]].y} `; });
                     return d;
                 };
+                if(results.rightHandLandmarks) fingersL.setAttribute("d", drawF(results.rightHandLandmarks)); else fingersL.setAttribute("d", "");
+                if(results.leftHandLandmarks) fingersR.setAttribute("d", drawF(results.leftHandLandmarks)); else fingersR.setAttribute("d", "");
 
-                if (results.rightHandLandmarks) {
-                    handLeftGroup.setAttribute("opacity", "1");
-                    fingersL.setAttribute("d", drawFingers(results.rightHandLandmarks));
-                } else handLeftGroup.setAttribute("opacity", "0");
-
-                if (results.leftHandLandmarks) {
-                    handRightGroup.setAttribute("opacity", "1");
-                    fingersR.setAttribute("d", drawFingers(results.leftHandLandmarks));
-                } else handRightGroup.setAttribute("opacity", "0");
-
-                // =====================================
-                // 3. 顔・表情のトラッキング
-                // =====================================
+                // --- 4. ASMR表情抽出・パララックス ---
                 if (results.faceLandmarks) {
                     const lms = results.faceLandmarks;
-                    const faceW = getDist(lms[234], lms[454]);
-                    const faceH = getDist(lms[10], lms[152]);
-                    const midX = (lms[234].x + lms[454].x) / 2;
-                    const midY = (lms[10].y + lms[152].y) / 2;
+                    const faceW = getDist(lms[234], lms[454]); const faceH = getDist(lms[10], lms[152]);
+                    const midX = (lms[234].x + lms[454].x)/2; const midY = (lms[10].y + lms[152].y)/2;
                     
-                    const yaw = (lms[4].x - midX) / faceW;
-                    const pitch = (lms[4].y - midY) / faceH - 0.1;
-                    const roll = -Math.atan2(lms[263].y - lms[33].y, lms[263].x - lms[33].x) * (180 / Math.PI);
+                    const tYaw = (lms[4].x - midX) / faceW;
+                    const tPitch = (lms[4].y - midY) / faceH - 0.1;
+                    const tRoll = -Math.atan2(lms[263].y - lms[33].y, lms[263].x - lms[33].x) * (180/Math.PI);
 
-                    // パララックス（視差）
-                    headGroup.style.transform = `rotate(${roll}deg)`;
-                    layerBack.style.transform = `translate(${yaw * -20}px, ${pitch * -15}px)`;
-                    layerMid.style.transform = `translate(${yaw * 15}px, ${pitch * 15}px)`;
-                    layerFront.style.transform = `translate(${yaw * 50}px, ${pitch * 40}px)`;
-                    layerTop.style.transform = `translate(${yaw * 80}px, ${pitch * 60}px)`;
+                    // スムージング
+                    curYaw += (tYaw - curYaw)*0.3; curPitch += (tPitch - curPitch)*0.3; curRoll += (tRoll - curRoll)*0.3;
 
-                    // まばたき（Live2D式スケール処理）
-                    const earL = getEAR(lms, 159, 145, 133, 33);
-                    const earR = getEAR(lms, 386, 374, 362, 263);
-                    const blinkL = Math.max(0.1, Math.min(1, (earL - 0.12) / 0.12));
-                    const blinkR = Math.max(0.1, Math.min(1, (earR - 0.12) / 0.12));
+                    // 物理演算（頭の動きの逆方向に慣性が働く）
+                    const pX = hairPhysicsX.update(-curYaw * 50);
+                    const pY = hairPhysicsY.update(-curPitch * 30);
+                    physicsHair.style.transform = `translate(${pX}px, ${pY}px) rotate(${pX*0.2}deg)`;
 
-                    // グループごとY軸に縮小することで、クリップされた瞳も一緒に潰れてガチのアニメ目に
-                    eyeGroupL.style.transform = `scaleY(${blinkL})`;
-                    eyeGroupR.style.transform = `scaleY(${blinkR})`;
+                    // 頭の回転と視差（呼吸によるY軸の揺らぎも追加）
+                    headGroup.style.transform = `translateY(${breathHeadY}px) rotate(${curRoll}deg)`;
+                    layerBack.style.transform = `translate(${curYaw * -15}px, ${curPitch * -15}px)`;
+                    layerMid.style.transform = `translate(${curYaw * 15}px, ${curPitch * 15}px)`;
+                    layerHairFront.style.transform = `translate(${curYaw * 30}px, ${curPitch * 25}px)`;
+                    layerFront.style.transform = `translate(${curYaw * 40}px, ${curPitch * 35}px)`;
 
-                    // まつげの太さを維持するための調整
-                    eyelashL.setAttribute("stroke-width", 12 / blinkL);
-                    eyelashR.setAttribute("stroke-width", 12 / blinkR);
+                    // 目の開閉（ジト目・見開き対応）
+                    const earL = getDist(lms[159], lms[145]) / getDist(lms[133], lms[33]);
+                    const earR = getDist(lms[386], lms[374]) / getDist(lms[362], lms[263]);
+                    const openL = Math.max(0, Math.min(1, (earL - 0.12) / 0.14));
+                    const openR = Math.max(0, Math.min(1, (earR - 0.12) / 0.14));
 
-                    // 瞳の追従
-                    irisL.setAttribute("cx", -60 + yaw * 30); irisL.setAttribute("cy", -12 + pitch * 20);
-                    irisR.setAttribute("cx", 60 + yaw * 30); irisR.setAttribute("cy", -12 + pitch * 20);
+                    // 目を開いた時、瞳孔が少し縮む（リアルな反応）
+                    const pupilScaleL = 1 - (openL * 0.15);
+                    const pupilScaleR = 1 - (openR * 0.15);
+                    pupilL.setAttribute("r", 8 * pupilScaleL); pupilR.setAttribute("r", 8 * pupilScaleR);
 
-                    // 口（上唇・下唇・口内を個別に変形）
-                    const mouthOpen = Math.min(1, Math.max(0, (getDist(lms[13], lms[14]) / faceH - 0.02) * 6));
-                    const smile = Math.min(1, Math.max(0, (getDist(lms[61], lms[291]) / faceW - 0.35) * 6));
-                    
-                    const mTop = 100 - smile * 8 - mouthOpen * 5;
-                    const mBot = 100 + mouthOpen * 30;
-                    const mCornerY = 100 - smile * 15;
-                    const mW = 30 + smile * 15;
-                    
-                    mouthInner.setAttribute("d", `M ${-mW} ${mCornerY} Q 0 ${mTop} ${mW} ${mCornerY} Q 0 ${mBot} ${-mW} ${mCornerY} Z`);
-                    teeth.setAttribute("d", `M ${-mW+5} ${mCornerY} Q 0 ${mTop+2} ${mW-5} ${mCornerY} Q 0 ${mTop+10} ${-mW+5} ${mCornerY} Z`);
-                    lipLine.setAttribute("d", `M ${-mW} ${mCornerY} Q 0 ${mTop} ${mW} ${mCornerY}`);
+                    // 目のパス変形（高度なQカーブ制御）
+                    const lidLY = -15 + (1 - openL) * 30;
+                    const lidRY = -15 + (1 - openR) * 30;
+                    const dEyeL = `M -110 -15 Q -60 ${lidLY - 20} -10 -15 Q -60 ${15 - (1-openL)*10} -110 -15 Z`;
+                    const dEyeR = `M 10 -15 Q 60 ${lidRY - 20} 110 -15 Q 60 ${15 - (1-openR)*10} 10 -15 Z`;
+                    eyePathL.setAttribute("d", dEyeL); eyePathR.setAttribute("d", dEyeR);
+                    eyelashL.setAttribute("d", `M -115 -10 Q -60 ${lidLY - 25} -5 -10`);
+                    eyelashR.setAttribute("d", `M 5 -10 Q 60 ${lidRY - 25} 115 -10`);
+                    doubleL.setAttribute("d", `M -90 -35 Q -60 ${lidLY - 40} -30 -35`);
+                    doubleR.setAttribute("d", `M 30 -35 Q 60 ${lidRY - 40} 90 -35`);
 
-                    // 眉毛
-                    const browElevL = (lms[159].y - lms[105].y) / faceH;
-                    const browElevR = (lms[386].y - lms[334].y) / faceH;
-                    browL.style.transform = `translateY(${(0.13 - browElevL) * 200}px)`;
-                    browR.style.transform = `translateY(${(0.13 - browElevR) * 200}px)`;
+                    irisL.setAttribute("cx", -60 + curYaw * 30); irisL.setAttribute("cy", -15 + curPitch * 20);
+                    irisR.setAttribute("cx", 60 + curYaw * 30); irisR.setAttribute("cy", -15 + curPitch * 20);
+
+                    // 眉の独立可動（怒り、困り眉）
+                    const browInL = (lms[105].y - lms[9].y) / faceH;
+                    const browOutL = (lms[105].y - lms[107].y) / faceH;
+                    const bLY = (0.05 - browInL) * 200;
+                    const bLRot = (browOutL - browInL) * 300;
+                    browL.setAttribute("d", `M -100 ${-60 + bLY - bLRot} Q -60 ${-70 + bLY} -20 ${-55 + bLY + bLRot}`);
+
+                    const browInR = (lms[334].y - lms[9].y) / faceH;
+                    const browOutR = (lms[334].y - lms[336].y) / faceH;
+                    const bRY = (0.05 - browInR) * 200;
+                    const bRRot = (browOutR - browInR) * 300;
+                    browR.setAttribute("d", `M 20 ${-55 + bRY + bRRot} Q 60 ${-70 + bRY} 100 ${-60 + bRY - bRRot}`);
+
+                    // 口（アシンメトリーなスマイル対応）
+                    const jawDrop = Math.max(0, (getDist(lms[13], lms[14]) / faceH - 0.015) * 7);
+                    const smileL = Math.max(0, (midX - lms[61].x) / faceW - 0.15) * 10;
+                    const smileR = Math.max(0, (lms[291].x - midX) / faceW - 0.15) * 10;
+                    const smileA = (smileL + smileR) / 2;
+                    const pucker = Math.max(0, 0.4 - getDist(lms[61], lms[291]) / faceW) * 5; // 「う」の口
+
+                    const mTop = 105 - smileA * 8 - jawDrop * 5 + pucker * 5;
+                    const mBot = 105 + jawDrop * 35 + pucker * 5;
+                    const mCL = 105 - smileL * 15; // 左口角（片方だけニヤリができる）
+                    const mCR = 105 - smileR * 15; // 右口角
+                    const mWL = 30 + smileL * 15 - pucker * 15;
+                    const mWR = 30 + smileR * 15 - pucker * 15;
+
+                    mouthInner.setAttribute("d", `M ${-mWL} ${mCL} Q 0 ${mTop} ${mWR} ${mCR} Q 0 ${mBot} ${-mWL} ${mCL} Z`);
+                    teeth.setAttribute("d", `M ${-mWL+5} ${mCL} Q 0 ${mTop+2} ${mWR-5} ${mCR} Q 0 ${mTop+8+jawDrop*5} ${-mWL+5} ${mCL} Z`);
+                    tongue.setAttribute("d", `M ${-mWL/2} ${mCL+jawDrop*10} Q 0 ${mBot-jawDrop*15} ${mWR/2} ${mCR+jawDrop*10} Q 0 ${mBot} ${-mWL/2} ${mCL+jawDrop*10} Z`);
+                    lipLine.setAttribute("d", `M ${-mWL} ${mCL} Q 0 ${mTop} ${mWR} ${mCR}`);
+
+                    // デバッグ出力
+                    p1.innerHTML = `EAR_L: ${earL.toFixed(3)}<br>JAW: ${jawDrop.toFixed(3)}<br>SM_L: ${smileL.toFixed(3)}`;
+                    p2.innerHTML = `P: ${curPitch.toFixed(3)}<br>Y: ${curYaw.toFixed(3)}<br>R: ${curRoll.toFixed(3)}`;
+                    p3.innerHTML = `PHYS_X: ${pX.toFixed(1)}<br>BRTH: ${breath.toFixed(3)}`;
                 }
             }
         };
