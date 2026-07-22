@@ -167,19 +167,32 @@
                     const animSpeed = 0.5; // アニメーション速度
                     
                     // =====================================
-                    // 目の処理（閉じる判定を甘く変更）
+                    // 目の処理（ガチャ目防止 ＆ ウインク検知システム）
                     // =====================================
                     sEarL += ((getDist(lms[159], lms[145]) / getDist(lms[133], lms[33])) - sEarL) * smoothFactor;
+                    sEarR += ((getDist(lms[386], lms[374]) / getDist(lms[362], lms[263])) - sEarR) * smoothFactor;
                     
-                    // 0.055 -> 0.09 に引き上げ（少し目が細まるだけで「閉じた」と判定）
-                    if (isEyeLOpen && sEarL < 0.09) isEyeLOpen = false;       
-                    // 0.075 -> 0.11 に引き上げ（しっかり目を開けないと「開いた」と判定しない）
-                    else if (!isEyeLOpen && sEarL > 0.11) isEyeLOpen = true;  
+                    let finalEarL = sEarL;
+                    let finalEarR = sEarR;
+
+                    // 【プロの技1】左右の目の開き具合の「差」を計算
+                    const earDiff = Math.abs(sEarL - sEarR);
+                    
+                    if (earDiff < 0.02) {
+                        // 差が小さい場合：普通の瞬きと判定し、両目を平均値で「完全同期」させる
+                        const avgEar = (sEarL + sEarR) / 2;
+                        finalEarL = avgEar;
+                        finalEarR = avgEar;
+                    } 
+                    // 差が 0.02 以上の場合は「ウインク」と判定し、独立して動かす（そのままの数値を使う）
+
+                    // --- 左目の適用 ---
+                    if (isEyeLOpen && finalEarL < 0.09) isEyeLOpen = false;       
+                    else if (!isEyeLOpen && finalEarL > 0.11) isEyeLOpen = true;  
 
                     const targetScaleL = isEyeLOpen ? 1.0 : 0.0;
                     currentScaleL += (targetScaleL - currentScaleL) * animSpeed;
-
-                    const angleL = -5; // 左目の斜め圧縮
+                    const angleL = -5;
 
                     if (currentScaleL <= 0.05) {
                         eyeLOpen.style.opacity = 0; eyeLClose.style.opacity = 1;
@@ -189,11 +202,9 @@
                         eyeLOpen.style.transform = `${partsXY} rotate(${angleL}deg) scaleY(${currentScaleL}) rotate(${-angleL}deg)`;
                     }
 
-                    // --- 右目 ---
-                    sEarR += ((getDist(lms[386], lms[374]) / getDist(lms[362], lms[263])) - sEarR) * smoothFactor;
-                    
-                    if (isEyeROpen && sEarR < 0.09) isEyeROpen = false;
-                    else if (!isEyeROpen && sEarR > 0.11) isEyeROpen = true;
+                    // --- 右目の適用 ---
+                    if (isEyeROpen && finalEarR < 0.09) isEyeROpen = false;
+                    else if (!isEyeROpen && finalEarR > 0.11) isEyeROpen = true;
 
                     const targetScaleR = isEyeROpen ? 1.0 : 0.0;
                     currentScaleR += (targetScaleR - currentScaleR) * animSpeed;
@@ -207,17 +218,36 @@
                     }
 
                     // =====================================
-                    // 【新】口の処理（3ステート・アニメーション）
+                    // 口の処理（4ステート ＆ 非対称減衰アニメーション）
                     // =====================================
                     sJaw += ((getDist(lms[13], lms[14]) / faceH) - sJaw) * smoothFactor;
                     
-                    let targetScaleMouth = 0.0; // デフォルトは「閉じる(0%)」
+                    let targetScaleMouth = 0.0; 
                     
-                    // 3段階の口の開き具合を判定
+                    // 4段階（0, 0.3, 0.65, 1.0）の判定
                     if (sJaw > 0.035) {
-                        targetScaleMouth = 1.0; // 「あ」「お」などの大口（100%）
-                    } else if (sJaw > 0.015) {
-                        targetScaleMouth = 0.5; // 「い」「え」などの半開き（50%）
+                        targetScaleMouth = 1.0; 
+                    } else if (sJaw > 0.02) {
+                        targetScaleMouth = 0.65; 
+                    } else if (sJaw > 0.01) {
+                        targetScaleMouth = 0.3;
+                    }
+
+                    // 【プロの技2】開く時は速く、閉じる時は遅く（粘り気を持たせる）
+                    if (targetScaleMouth > currentScaleMouth) {
+                        // 口を開く動作（即座に反応）
+                        currentScaleMouth += (targetScaleMouth - currentScaleMouth) * 0.8;
+                    } else {
+                        // 口を閉じる動作（ゆっくり余韻を残して閉じる）
+                        currentScaleMouth += (targetScaleMouth - currentScaleMouth) * 0.25;
+                    }
+                    
+                    if (currentScaleMouth <= 0.02) {
+                        mouthOpen.style.opacity = 0; mouthClose.style.opacity = 1;
+                        mouthClose.style.transform = partsXY;
+                    } else {
+                        mouthOpen.style.opacity = 1; mouthClose.style.opacity = 0;
+                        mouthOpen.style.transform = `${partsXY} scaleY(${currentScaleMouth})`;
                     }
 
                     // 目と同じように、ターゲットに向かって滑らかにアニメーションさせる
