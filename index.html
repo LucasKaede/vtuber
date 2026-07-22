@@ -175,7 +175,7 @@
                     
                     const angleL = -5; // 左目の斜め具合
 
-                    if (ratioEyeL <= 0.05) {
+                    if (ratioEyeL <= 0.02) {
                         eyeLOpen.style.opacity = 0; eyeLClose.style.opacity = 1;
                         eyeLClose.style.transform = partsXY; 
                     } else {
@@ -187,7 +187,7 @@
                     sEarR += ((getDist(lms[386], lms[374]) / getDist(lms[362], lms[263])) - sEarR) * smoothFactor;
                     const ratioEyeR = Math.max(0, Math.min(1, (sEarR - 0.06) / 0.06));
                     
-                    if (ratioEyeR <= 0.05) {
+                    if (ratioEyeR <= 0.02) {
                         eyeROpen.style.opacity = 0; eyeRClose.style.opacity = 1;
                         eyeRClose.style.transform = partsXY;
                     } else {
