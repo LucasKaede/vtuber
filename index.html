@@ -3,17 +3,34 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>My VTuber Engine - Ultimate Perfect</title>
+    <title>My VTuber Engine - Mobile Ready & High Sensitivity</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { background: #1a1a24; overflow: hidden; display: flex; align-items: center; justify-content: center; height: 100vh; color: white; font-family: sans-serif; }
         
-        #character-container { position: relative; width: 100vw; height: 100vh; display: flex; align-items: center; justify-content: center; }
+        #character-container { 
+            position: relative; width: 100vw; height: 100vh; 
+            display: flex; align-items: center; justify-content: center; 
+        }
 
-        /* 滑らかなパララックス用のtransition（頭と体のみ） */
+        /* 
+         【SP対応の要】
+         画面が縦長でも横長でも、キャラクターの箱を絶対に「1:1の正方形」に保ちます。
+         これで transform-origin (35%や44%) がどの端末でも完璧に一致します。
+        */
+        #avatar-wrapper {
+            position: relative;
+            width: 100%; 
+            max-width: 800px;
+            aspect-ratio: 1 / 1; 
+        }
+
+        /* 
+         パーツ類はすべて #avatar-wrapper にピッタリ合わせる設定に変更
+         (object-fit が不要になります) 
+        */
         .layer {
-            position: absolute; width: 100%; max-width: 800px; height: 100%; max-height: 800px;
-            object-fit: contain;
+            position: absolute; width: 100%; height: 100%; top: 0; left: 0;
             transition: transform 0.05s ease-out;
             will-change: transform, opacity;
         }
@@ -23,21 +40,19 @@
         #layer-body { z-index: 3; }
         
         #head-group {
-            position: absolute; width: 100%; max-width: 800px; height: 100%; max-height: 800px;
+            position: absolute; width: 100%; height: 100%; top: 0; left: 0;
             z-index: 4; transition: transform 0.05s ease-out; transform-origin: center 60%;
         }
 
         #layer-face { z-index: 5; }
         #layer-nose { z-index: 6; }
         
-        /* 表情パーツはtransitionを外し、即時変形（歪み防止） */
         .part-eye, .part-mouth, .part-brow {
-            position: absolute; width: 100%; max-width: 800px; height: 100%; max-height: 800px;
-            object-fit: contain;
+            position: absolute; width: 100%; height: 100%; top: 0; left: 0;
             will-change: transform, opacity;
         }
 
-        /* 導き出した最適値（圧縮の基準点） */
+        /* PC・SP共通の完璧な圧縮基準点 */
         .part-eye { z-index: 7; transform-origin: center 35%; } 
         .part-mouth { z-index: 7; transform-origin: center 44%; } 
         .part-brow { z-index: 7; }
@@ -58,27 +73,30 @@
     <video id="webcam" autoplay playsinline muted></video>
 
     <div id="character-container">
-        <img id="layer-hair-back" class="layer" src="hair_back.png">
-        <img id="layer-neck" class="layer" src="neck.png">
-        <img id="layer-body" class="layer" src="body.png">
-        
-        <div id="head-group">
-            <img id="layer-face" class="layer" src="face.png">
-            <img id="layer-nose" class="layer" src="nose.png">
+        <!-- 【SP対応】正方形を維持するラッパーを追加 -->
+        <div id="avatar-wrapper">
+            <img id="layer-hair-back" class="layer" src="hair_back.png">
+            <img id="layer-neck" class="layer" src="neck.png">
+            <img id="layer-body" class="layer" src="body.png">
             
-            <img id="eye_l_open" class="part-eye" src="eye_l_open.png">
-            <img id="eye_l_close" class="part-eye" src="eye_l_close.png" style="opacity: 0;">
-            
-            <img id="eye_r_open" class="part-eye" src="eye_r_open.png">
-            <img id="eye_r_close" class="part-eye" src="eye_r_close.png" style="opacity: 0;">
-            
-            <img id="eye_l_brow" class="part-brow" src="eye_l_brow.png">
-            <img id="eye_r_brow" class="part-brow" src="eye_r_brow.png">
+            <div id="head-group">
+                <img id="layer-face" class="layer" src="face.png">
+                <img id="layer-nose" class="layer" src="nose.png">
+                
+                <img id="eye_l_open" class="part-eye" src="eye_l_open.png">
+                <img id="eye_l_close" class="part-eye" src="eye_l_close.png" style="opacity: 0;">
+                
+                <img id="eye_r_open" class="part-eye" src="eye_r_open.png">
+                <img id="eye_r_close" class="part-eye" src="eye_r_close.png" style="opacity: 0;">
+                
+                <img id="eye_l_brow" class="part-brow" src="eye_l_brow.png">
+                <img id="eye_r_brow" class="part-brow" src="eye_r_brow.png">
 
-            <img id="mouth_close" class="part-mouth" src="mouth_close.png">
-            <img id="mouth_open" class="part-mouth" src="mouth_open.png" style="opacity: 0;">
+                <img id="mouth_close" class="part-mouth" src="mouth_close.png">
+                <img id="mouth_open" class="part-mouth" src="mouth_open.png" style="opacity: 0;">
 
-            <img id="layer-hair-front" class="layer" src="hair_front.png">
+                <img id="layer-hair-front" class="layer" src="hair_front.png">
+            </div>
         </div>
     </div>
 
@@ -117,7 +135,7 @@
                     faceMesh.onResults(onResults);
                     const camera = new Camera(video, { onFrame: async () => { await faceMesh.send({image: video}); }, width: 480, height: 640 });
                     await camera.start();
-                    video.style.display = "block"; startBtn.style.display = "none"; statusText.textContent = "稼働中 (完全版)";
+                    video.style.display = "block"; startBtn.style.display = "none"; statusText.textContent = "稼働中 (SP対応 & 高感度版)";
                 } catch (error) {
                     statusText.textContent = "カメラエラー";
                 }
@@ -143,7 +161,7 @@
                     neck.style.transform = `rotate(${sRoll * 0.15}deg) translate(${sYaw * 6}px, ${sPitch * 6}px)`;
                     body.style.transform = `rotate(${sRoll * 0.05}deg) translate(${sYaw * 2}px, ${sPitch * 2}px)`;
                     
-                    // パララックス（立体感）
+                    // パララックス
                     hairBack.style.transform = `translate(${sYaw * -20}px, ${sPitch * -10}px)`;
                     face.style.transform = `translate(${sYaw * 5}px, ${sPitch * 5}px)`;
                     nose.style.transform = `translate(${sYaw * 25}px, ${sPitch * 20}px)`;
@@ -151,40 +169,41 @@
 
                     const partsXY = `translate(${sYaw * 15}px, ${sPitch * 15}px)`;
 
-                    // --- 左目（斜め圧縮対応） ---
-sEarL += ((getDist(lms[159], lms[145]) / getDist(lms[133], lms[33])) - sEarL) * smoothFactor;
-
-// 【シビア化 1】0.09を「0.06」に下げました。（EARが0.06になるまで「完全に閉じた」と判定しません）
-const ratioEyeL = Math.max(0, Math.min(1, (sEarL - 0.06) / 0.06));
-const angleL = -5;
-
-// 【シビア化 2】0.1を「0.05」に下げました。（95%以上目が潰れるまで、閉じた目に切り替わりません）
-if (ratioEyeL <= 0.05) {
-    eyeLOpen.style.opacity = 0; eyeLClose.style.opacity = 1;
-    eyeLClose.style.transform = partsXY; 
-} else {
-    eyeLOpen.style.opacity = 1; eyeLClose.style.opacity = 0;
-    eyeLOpen.style.transform = `${partsXY} rotate(${angleL}deg) scaleY(${ratioEyeL}) rotate(${-angleL}deg)`;
-}
-
-// --- 右目（通常の上下圧縮） ---
-sEarR += ((getDist(lms[386], lms[374]) / getDist(lms[362], lms[263])) - sEarR) * smoothFactor;
-
-// （右目も同様に数値を下げています）
-const ratioEyeR = Math.max(0, Math.min(1, (sEarR - 0.06) / 0.06));
-
-if (ratioEyeR <= 0.05) {
-    eyeROpen.style.opacity = 0; eyeRClose.style.opacity = 1;
-    eyeRClose.style.transform = partsXY;
-} else {
-    eyeROpen.style.opacity = 1; eyeRClose.style.opacity = 0;
-    eyeROpen.style.transform = `${partsXY} scaleY(${ratioEyeR})`;
-}
-                    // --- 口（通常の上下圧縮） ---
-                    sJaw += ((getDist(lms[13], lms[14]) / faceH) - sJaw) * smoothFactor;
-                    const ratioMouth = Math.max(0, Math.min(1, (sJaw - 0.02) / 0.05));
+                    // --- 左目（シビア判定＆斜め圧縮対応） ---
+                    sEarL += ((getDist(lms[159], lms[145]) / getDist(lms[133], lms[33])) - sEarL) * smoothFactor;
+                    const ratioEyeL = Math.max(0, Math.min(1, (sEarL - 0.06) / 0.06));
                     
-                    if (ratioMouth <= 0.05) {
+                    const angleL = -5; // 左目の斜め具合
+
+                    if (ratioEyeL <= 0.05) {
+                        eyeLOpen.style.opacity = 0; eyeLClose.style.opacity = 1;
+                        eyeLClose.style.transform = partsXY; 
+                    } else {
+                        eyeLOpen.style.opacity = 1; eyeLClose.style.opacity = 0;
+                        eyeLOpen.style.transform = `${partsXY} rotate(${angleL}deg) scaleY(${ratioEyeL}) rotate(${-angleL}deg)`;
+                    }
+
+                    // --- 右目（シビア判定） ---
+                    sEarR += ((getDist(lms[386], lms[374]) / getDist(lms[362], lms[263])) - sEarR) * smoothFactor;
+                    const ratioEyeR = Math.max(0, Math.min(1, (sEarR - 0.06) / 0.06));
+                    
+                    if (ratioEyeR <= 0.05) {
+                        eyeROpen.style.opacity = 0; eyeRClose.style.opacity = 1;
+                        eyeRClose.style.transform = partsXY;
+                    } else {
+                        eyeROpen.style.opacity = 1; eyeRClose.style.opacity = 0;
+                        eyeROpen.style.transform = `${partsXY} scaleY(${ratioEyeR})`;
+                    }
+
+                    // --- 口（超高感度化） ---
+                    sJaw += ((getDist(lms[13], lms[14]) / faceH) - sJaw) * smoothFactor;
+                    
+                    // 【口の感度設定】 
+                    // 0.005（ほんのわずかに開いた状態）から反応開始。
+                    // 0.03（少し開いた状態）で100%全開の大きさまで伸びます。
+                    const ratioMouth = Math.max(0, Math.min(1, (sJaw - 0.005) / 0.03));
+                    
+                    if (ratioMouth <= 0.02) {
                         mouthOpen.style.opacity = 0; mouthClose.style.opacity = 1;
                         mouthClose.style.transform = partsXY;
                     } else {
