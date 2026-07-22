@@ -41,7 +41,7 @@
         }
 
         .part-eye { z-index: 7; transform-origin: center 35%; } 
-        .part-mouth { z-index: 7; transform-origin: center 44%; } 
+        .part-mouth { z-index: 7; transform-origin: center 52%; } 
         .part-brow { z-index: 7; }
         
         #layer-hair-front { z-index: 10; }
@@ -210,7 +210,7 @@
                     // 【お・うの判定】
                     // 「あ」と大きく開けても、人間の口の横幅は 0.18 以下には物理的になりません。
                     // なので「0.18未満になったら確実にすぼめている」と判定します。
-                    if (sMouthW < 0.20) {
+                    if (sMouthW < 0.23) {
                         targetScaleXMouth = 0.5; // タコ口の潰れ具合（過剰）
                     } 
                     // 【い・えの判定】
