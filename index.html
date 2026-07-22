@@ -184,7 +184,7 @@ if (ratioEyeR <= 0.05) {
                     sJaw += ((getDist(lms[13], lms[14]) / faceH) - sJaw) * smoothFactor;
                     const ratioMouth = Math.max(0, Math.min(1, (sJaw - 0.02) / 0.05));
                     
-                    if (ratioMouth <= 0.1) {
+                    if (ratioMouth <= 0.5) {
                         mouthOpen.style.opacity = 0; mouthClose.style.opacity = 1;
                         mouthClose.style.transform = partsXY;
                     } else {
