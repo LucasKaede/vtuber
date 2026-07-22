@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>My VTuber Engine - Mobile Ready & High Sensitivity</title>
+    <title>My VTuber Engine - Binary Smooth Eyes</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { background: #1a1a24; overflow: hidden; display: flex; align-items: center; justify-content: center; height: 100vh; color: white; font-family: sans-serif; }
@@ -13,11 +13,7 @@
             display: flex; align-items: center; justify-content: center; 
         }
 
-        /* 
-         【SP対応の要】
-         画面が縦長でも横長でも、キャラクターの箱を絶対に「1:1の正方形」に保ちます。
-         これで transform-origin (35%や44%) がどの端末でも完璧に一致します。
-        */
+        /* SP環境でも絶対にズレないための正方形固定ラッパー */
         #avatar-wrapper {
             position: relative;
             width: 100%; 
@@ -25,10 +21,6 @@
             aspect-ratio: 1 / 1; 
         }
 
-        /* 
-         パーツ類はすべて #avatar-wrapper にピッタリ合わせる設定に変更
-         (object-fit が不要になります) 
-        */
         .layer {
             position: absolute; width: 100%; height: 100%; top: 0; left: 0;
             transition: transform 0.05s ease-out;
@@ -47,6 +39,7 @@
         #layer-face { z-index: 5; }
         #layer-nose { z-index: 6; }
         
+        /* 目・口・眉からはCSS transitionを外し、JSで滑らかさを完全制御する */
         .part-eye, .part-mouth, .part-brow {
             position: absolute; width: 100%; height: 100%; top: 0; left: 0;
             will-change: transform, opacity;
@@ -73,7 +66,6 @@
     <video id="webcam" autoplay playsinline muted></video>
 
     <div id="character-container">
-        <!-- 【SP対応】正方形を維持するラッパーを追加 -->
         <div id="avatar-wrapper">
             <img id="layer-hair-back" class="layer" src="hair_back.png">
             <img id="layer-neck" class="layer" src="neck.png">
@@ -127,6 +119,12 @@
             let sYaw = 0, sPitch = 0, sRoll = 0;
             let sEarL = 0.15, sEarR = 0.15, sJaw = 0;
 
+            // 【新機能】目の2択状態と、現在のアニメーション状態を記憶する変数
+            let isEyeLOpen = true;
+            let isEyeROpen = true;
+            let currentScaleL = 1.0;
+            let currentScaleR = 1.0;
+
             startBtn.addEventListener("click", async () => {
                 startBtn.disabled = true; statusText.textContent = "AIモデル読み込み中...";
                 try {
@@ -135,7 +133,7 @@
                     faceMesh.onResults(onResults);
                     const camera = new Camera(video, { onFrame: async () => { await faceMesh.send({image: video}); }, width: 480, height: 640 });
                     await camera.start();
-                    video.style.display = "block"; startBtn.style.display = "none"; statusText.textContent = "稼働中 (SP対応 & 高感度版)";
+                    video.style.display = "block"; startBtn.style.display = "none"; statusText.textContent = "稼働中 (ピクピク解消 2択アニメーション版)";
                 } catch (error) {
                     statusText.textContent = "カメラエラー";
                 }
@@ -156,12 +154,10 @@
                     sPitch += (((lms[4].y - midY) / faceH - 0.1) - sPitch) * smoothFactor;
                     sRoll += ((-Math.atan2(lms[263].y - lms[33].y, lms[263].x - lms[33].x) * (180 / Math.PI)) - sRoll) * smoothFactor;
 
-                    // 体としなり
                     headGroup.style.transform = `rotate(${sRoll}deg) translate(${sYaw * 15}px, ${sPitch * 15}px)`;
                     neck.style.transform = `rotate(${sRoll * 0.15}deg) translate(${sYaw * 6}px, ${sPitch * 6}px)`;
                     body.style.transform = `rotate(${sRoll * 0.05}deg) translate(${sYaw * 2}px, ${sPitch * 2}px)`;
                     
-                    // パララックス
                     hairBack.style.transform = `translate(${sYaw * -20}px, ${sPitch * -10}px)`;
                     face.style.transform = `translate(${sYaw * 5}px, ${sPitch * 5}px)`;
                     nose.style.transform = `translate(${sYaw * 25}px, ${sPitch * 20}px)`;
@@ -169,38 +165,57 @@
 
                     const partsXY = `translate(${sYaw * 15}px, ${sPitch * 15}px)`;
 
-                    // --- 左目（シビア判定＆斜め圧縮対応） ---
-                    sEarL += ((getDist(lms[159], lms[145]) / getDist(lms[133], lms[33])) - sEarL) * smoothFactor;
-                    const ratioEyeL = Math.max(0, Math.min(1, (sEarL - 0.06) / 0.06));
+                    // =====================================
+                    // 目の処理（2択振り切り ＋ JS滑らかアニメーション）
+                    // =====================================
+                    // アニメーションのスピード（1.0で即時、数値を下げるほどゆっくり閉じる）
+                    const blinkSpeed = 0.5; 
                     
-                    const angleL = -5; // 左目の斜め具合
+                    // --- 左目 ---
+                    sEarL += ((getDist(lms[159], lms[145]) / getDist(lms[133], lms[33])) - sEarL) * smoothFactor;
+                    
+                    // 1. カメラの数値から「開けるべきか、閉じるべきか」の2択だけを判断する
+                    if (isEyeLOpen && sEarL < 0.055) isEyeLOpen = false;       // 閉じる！
+                    else if (!isEyeLOpen && sEarL > 0.075) isEyeLOpen = true;  // 開く！
 
-                    if (ratioEyeL <= 0.02) {
+                    // 2. ターゲットの倍率をセット（開=1.0, 閉=0.0 のどちらかしか存在しない）
+                    const targetScaleL = isEyeLOpen ? 1.0 : 0.0;
+                    
+                    // 3. 現在の倍率をターゲットに向かって滑らかに近づける（ここでアニメーションになる）
+                    currentScaleL += (targetScaleL - currentScaleL) * blinkSpeed;
+
+                    const angleL = -5; // 左目の斜め圧縮
+
+                    // 完全に閉じきった時だけ画像切り替え
+                    if (currentScaleL <= 0.05) {
                         eyeLOpen.style.opacity = 0; eyeLClose.style.opacity = 1;
                         eyeLClose.style.transform = partsXY; 
                     } else {
                         eyeLOpen.style.opacity = 1; eyeLClose.style.opacity = 0;
-                        eyeLOpen.style.transform = `${partsXY} rotate(${angleL}deg) scaleY(${ratioEyeL}) rotate(${-angleL}deg)`;
+                        eyeLOpen.style.transform = `${partsXY} rotate(${angleL}deg) scaleY(${currentScaleL}) rotate(${-angleL}deg)`;
                     }
 
-                    // --- 右目（シビア判定） ---
+                    // --- 右目 ---
                     sEarR += ((getDist(lms[386], lms[374]) / getDist(lms[362], lms[263])) - sEarR) * smoothFactor;
-                    const ratioEyeR = Math.max(0, Math.min(1, (sEarR - 0.06) / 0.06));
                     
-                    if (ratioEyeR <= 0.02) {
+                    if (isEyeROpen && sEarR < 0.055) isEyeROpen = false;
+                    else if (!isEyeROpen && sEarR > 0.075) isEyeROpen = true;
+
+                    const targetScaleR = isEyeROpen ? 1.0 : 0.0;
+                    currentScaleR += (targetScaleR - currentScaleR) * blinkSpeed;
+
+                    if (currentScaleR <= 0.05) {
                         eyeROpen.style.opacity = 0; eyeRClose.style.opacity = 1;
                         eyeRClose.style.transform = partsXY;
                     } else {
                         eyeROpen.style.opacity = 1; eyeRClose.style.opacity = 0;
-                        eyeROpen.style.transform = `${partsXY} scaleY(${ratioEyeR})`;
+                        eyeROpen.style.transform = `${partsXY} scaleY(${currentScaleR})`;
                     }
 
-                    // --- 口（超高感度化） ---
+                    // =====================================
+                    // 口の処理（口は連続で動かした方が喋りが自然なため、高感度設定を維持）
+                    // =====================================
                     sJaw += ((getDist(lms[13], lms[14]) / faceH) - sJaw) * smoothFactor;
-                    
-                    // 【口の感度設定】 
-                    // 0.005（ほんのわずかに開いた状態）から反応開始。
-                    // 0.03（少し開いた状態）で100%全開の大きさまで伸びます。
                     const ratioMouth = Math.max(0, Math.min(1, (sJaw - 0.005) / 0.03));
                     
                     if (ratioMouth <= 0.02) {
