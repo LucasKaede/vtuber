@@ -152,31 +152,34 @@
                     const partsXY = `translate(${sYaw * 15}px, ${sPitch * 15}px)`;
 
                     // --- 左目（斜め圧縮対応） ---
-                    sEarL += ((getDist(lms[159], lms[145]) / getDist(lms[133], lms[33])) - sEarL) * smoothFactor;
-                    const ratioEyeL = Math.max(0, Math.min(1, (sEarL - 0.09) / 0.05));
-                    
-                    const angleL = -5; // ★ここで左目の斜め具合を調整できます
+sEarL += ((getDist(lms[159], lms[145]) / getDist(lms[133], lms[33])) - sEarL) * smoothFactor;
 
-                    if (ratioEyeL <= 0.1) {
-                        eyeLOpen.style.opacity = 0; eyeLClose.style.opacity = 1;
-                        eyeLClose.style.transform = partsXY; 
-                    } else {
-                        eyeLOpen.style.opacity = 1; eyeLClose.style.opacity = 0;
-                        eyeLOpen.style.transform = `${partsXY} rotate(${angleL}deg) scaleY(${ratioEyeL}) rotate(${-angleL}deg)`;
-                    }
+// 【シビア化 1】0.09を「0.06」に下げました。（EARが0.06になるまで「完全に閉じた」と判定しません）
+const ratioEyeL = Math.max(0, Math.min(1, (sEarL - 0.06) / 0.06));
+const angleL = -5;
 
-                    // --- 右目（通常の上下圧縮） ---
-                    sEarR += ((getDist(lms[386], lms[374]) / getDist(lms[362], lms[263])) - sEarR) * smoothFactor;
-                    const ratioEyeR = Math.max(0, Math.min(1, (sEarR - 0.09) / 0.05));
-                    
-                    if (ratioEyeR <= 0.1) {
-                        eyeROpen.style.opacity = 0; eyeRClose.style.opacity = 1;
-                        eyeRClose.style.transform = partsXY;
-                    } else {
-                        eyeROpen.style.opacity = 1; eyeRClose.style.opacity = 0;
-                        eyeROpen.style.transform = `${partsXY} scaleY(${ratioEyeR})`;
-                    }
+// 【シビア化 2】0.1を「0.05」に下げました。（95%以上目が潰れるまで、閉じた目に切り替わりません）
+if (ratioEyeL <= 0.05) {
+    eyeLOpen.style.opacity = 0; eyeLClose.style.opacity = 1;
+    eyeLClose.style.transform = partsXY; 
+} else {
+    eyeLOpen.style.opacity = 1; eyeLClose.style.opacity = 0;
+    eyeLOpen.style.transform = `${partsXY} rotate(${angleL}deg) scaleY(${ratioEyeL}) rotate(${-angleL}deg)`;
+}
 
+// --- 右目（通常の上下圧縮） ---
+sEarR += ((getDist(lms[386], lms[374]) / getDist(lms[362], lms[263])) - sEarR) * smoothFactor;
+
+// （右目も同様に数値を下げています）
+const ratioEyeR = Math.max(0, Math.min(1, (sEarR - 0.06) / 0.06));
+
+if (ratioEyeR <= 0.05) {
+    eyeROpen.style.opacity = 0; eyeRClose.style.opacity = 1;
+    eyeRClose.style.transform = partsXY;
+} else {
+    eyeROpen.style.opacity = 1; eyeRClose.style.opacity = 0;
+    eyeROpen.style.transform = `${partsXY} scaleY(${ratioEyeR})`;
+}
                     // --- 口（通常の上下圧縮） ---
                     sJaw += ((getDist(lms[13], lms[14]) / faceH) - sJaw) * smoothFactor;
                     const ratioMouth = Math.max(0, Math.min(1, (sJaw - 0.02) / 0.05));
