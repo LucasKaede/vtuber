@@ -235,20 +235,22 @@
 
                     if (targetScaleMouth < 0.05) targetScaleMouth = 0.0; 
 
-                    // 開閉アニメーション
+
+                    // 【修正】開閉アニメーション（超・俊敏仕様に変更！）
                     if (targetScaleMouth > currentScaleMouth) {
-                        currentScaleMouth += (targetScaleMouth - currentScaleMouth) * 0.6; 
+                        // 開く速度：ほぼ瞬時（0.6 → 0.85 にアップ）
+                        currentScaleMouth += (targetScaleMouth - currentScaleMouth) * 0.85; 
                     } else {
-                        currentScaleMouth += (targetScaleMouth - currentScaleMouth) * 0.15; 
+                        // 閉じる速度：ラグを無くし瞬時に閉じる（0.15 → 0.8 に大幅アップ）
+                        currentScaleMouth += (targetScaleMouth - currentScaleMouth) * 0.8; 
                     }
                     
                     // 適用（scale の引数に 横幅と縦幅 を両方入れる）
                     if (currentScaleMouth <= 0.02) {
                         mouthOpen.style.opacity = 0; mouthClose.style.opacity = 1;
-                        mouthClose.style.transform = partsXY; // 閉じた口は潰さない
+                        mouthClose.style.transform = partsXY; 
                     } else {
                         mouthOpen.style.opacity = 1; mouthClose.style.opacity = 0;
-                        // ★ここで、擬似的な「い」「お」の横幅（currentScaleXMouth）を適用！
                         mouthOpen.style.transform = `${partsXY} scale(${currentScaleXMouth}, ${currentScaleMouth})`;
                     }
 
