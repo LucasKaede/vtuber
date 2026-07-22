@@ -112,24 +112,19 @@
 
             let sYaw = 0, sPitch = 0, sRoll = 0;
             let sEarL = 0.15, sEarR = 0.15, sJaw = 0;
+            let sMouthW = 0.22; // 口の横幅の初期値
 
-            let isEyeLOpen = true;
-            let isEyeROpen = true;
-            let currentScaleL = 1.0;
-            let currentScaleR = 1.0;
-            let currentScaleMouth = 0.0;
+            let isEyeLOpen = true; let isEyeROpen = true;
+            let currentScaleL = 1.0; let currentScaleR = 1.0;
             
-            // 【新】音声データ格納用変数
+            let currentScaleMouth = 0.0; // 縦の開き（あ・口の開閉）
+            let currentScaleXMouth = 1.0; // 横の開き（い・お・う）
+            
             let audioVolume = 0;
 
             startBtn.addEventListener("click", async () => {
-                startBtn.disabled = true; 
-                statusText.textContent = "マイクとカメラを準備中...";
-                
+                startBtn.disabled = true; statusText.textContent = "マイクとカメラを準備中...";
                 try {
-                    // =====================================
-                    // 1. マイク（Web Audio API）のセットアップ
-                    // =====================================
                     const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
                     const audioContext = new (window.AudioContext || window.webkitAudioContext)();
                     const analyser = audioContext.createAnalyser();
@@ -138,32 +133,23 @@
                     source.connect(analyser);
                     const dataArray = new Uint8Array(analyser.frequencyBinCount);
 
-                    // 音量を毎フレーム取得するループ
                     function updateVolume() {
                         requestAnimationFrame(updateVolume);
                         analyser.getByteFrequencyData(dataArray);
                         let sum = 0;
                         for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
-                        audioVolume = sum / dataArray.length; // 0 〜 約100の数値が入る
+                        audioVolume = sum / dataArray.length;
                     }
                     updateVolume();
 
-                    // =====================================
-                    // 2. カメラ（FaceMesh）のセットアップ
-                    // =====================================
                     const faceMesh = new FaceMesh({locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${f}`});
                     faceMesh.setOptions({ maxNumFaces: 1, refineLandmarks: true, minDetectionConfidence: 0.6, minTrackingConfidence: 0.6 });
                     faceMesh.onResults(onResults);
                     
                     const camera = new Camera(video, { onFrame: async () => { await faceMesh.send({image: video}); }, width: 480, height: 640 });
                     await camera.start();
-                    
-                    video.style.display = "block"; 
-                    startBtn.style.display = "none"; 
-                    statusText.textContent = "稼働中 (ハイブリッド音声リップシンク)";
-                    
+                    video.style.display = "block"; startBtn.style.display = "none"; statusText.textContent = "稼働中 (母音トラッキング実装)";
                 } catch (error) {
-                    console.error(error);
                     statusText.textContent = "エラー：カメラかマイクが許可されていません";
                 }
             });
@@ -195,80 +181,75 @@
                     const partsXY = `translate(${sYaw * 15}px, ${sPitch * 15}px)`;
                     const animSpeed = 0.5;
                     
-                    // =====================================
-                    // 目の処理（強制シンクロ・完全連動）
-                    // =====================================
+                    // --- 目の処理 ---
                     sEarL += ((getDist(lms[159], lms[145]) / getDist(lms[133], lms[33])) - sEarL) * smoothFactor;
                     sEarR += ((getDist(lms[386], lms[374]) / getDist(lms[362], lms[263])) - sEarR) * smoothFactor;
                     const syncEar = (sEarL + sEarR) / 2;
 
-                    // 左目
                     if (isEyeLOpen && syncEar < 0.09) isEyeLOpen = false;       
                     else if (!isEyeLOpen && syncEar > 0.11) isEyeLOpen = true;  
-                    const targetScaleL = isEyeLOpen ? 1.0 : 0.0;
-                    currentScaleL += (targetScaleL - currentScaleL) * animSpeed;
+                    currentScaleL += ((isEyeLOpen ? 1.0 : 0.0) - currentScaleL) * animSpeed;
                     const angleL = -5;
-                    if (currentScaleL <= 0.05) {
-                        eyeLOpen.style.opacity = 0; eyeLClose.style.opacity = 1;
-                        eyeLClose.style.transform = partsXY; 
-                    } else {
-                        eyeLOpen.style.opacity = 1; eyeLClose.style.opacity = 0;
-                        eyeLOpen.style.transform = `${partsXY} rotate(${angleL}deg) scaleY(${currentScaleL}) rotate(${-angleL}deg)`;
-                    }
+                    if (currentScaleL <= 0.05) { eyeLOpen.style.opacity = 0; eyeLClose.style.opacity = 1; eyeLClose.style.transform = partsXY; } 
+                    else { eyeLOpen.style.opacity = 1; eyeLClose.style.opacity = 0; eyeLOpen.style.transform = `${partsXY} rotate(${angleL}deg) scaleY(${currentScaleL}) rotate(${-angleL}deg)`; }
 
-                    // 右目
                     if (isEyeROpen && syncEar < 0.09) isEyeROpen = false;
                     else if (!isEyeROpen && syncEar > 0.11) isEyeROpen = true;
-                    const targetScaleR = isEyeROpen ? 1.0 : 0.0;
-                    currentScaleR += (targetScaleR - currentScaleR) * animSpeed;
-                    if (currentScaleR <= 0.05) {
-                        eyeROpen.style.opacity = 0; eyeRClose.style.opacity = 1;
-                        eyeRClose.style.transform = partsXY;
-                    } else {
-                        eyeROpen.style.opacity = 1; eyeRClose.style.opacity = 0;
-                        eyeROpen.style.transform = `${partsXY} scaleY(${currentScaleR})`;
-                    }
+                    currentScaleR += ((isEyeROpen ? 1.0 : 0.0) - currentScaleR) * animSpeed;
+                    if (currentScaleR <= 0.05) { eyeROpen.style.opacity = 0; eyeRClose.style.opacity = 1; eyeRClose.style.transform = partsXY; } 
+                    else { eyeROpen.style.opacity = 1; eyeRClose.style.opacity = 0; eyeROpen.style.transform = `${partsXY} scaleY(${currentScaleR})`; }
 
                     // =====================================
-                    // 究極進化：口の処理（子音ブロッカー搭載ハイブリッド）
+                    // 母音（い・お）と、開きっぱなし防止の実装
                     // =====================================
                     
-                    // A: 【マイク】音量を「0.0 〜 1.0」の開き具合に変換
-                    let audioTarget = Math.max(0, Math.min(1.0, audioVolume / 35));
+                    // 1. 口の横幅（い・お）の判定
+                    // lms[61]とlms[291]は口の左右の端の座標です
+                    sMouthW += ((getDist(lms[61], lms[291]) / faceW) - sMouthW) * smoothFactor;
+                    
+                    let targetScaleXMouth = 1.0;
+                    if (sMouthW > 0.23) {
+                        targetScaleXMouth = 1.15; // 「い」「え」など横に広げた時は画像を横に伸ばす
+                    } else if (sMouthW < 0.19) {
+                        targetScaleXMouth = 0.8;  // 「お」「う」などすぼめた時は画像を細くする
+                    }
+                    currentScaleXMouth += (targetScaleXMouth - currentScaleXMouth) * 0.4;
 
-                    // B: 【カメラ】実際の口の開き具合
+                    // 2. 音量のカーブ化（開きっぱなし防止）
+                    // 以前はリニア（直線）でしたが、今回は2乗（カーブ）にしました。
+                    // 中くらいの音量では少ししか開かず、声のピーク時にだけパクッと開くため、メリハリが出ます。
+                    let audioBase = Math.max(0, (audioVolume - 10) / 30); 
+                    let audioTarget = Math.max(0, Math.min(1.0, audioBase * audioBase));
+
+                    // 3. カメラの縦の開き
                     sJaw += ((getDist(lms[13], lms[14]) / faceH) - sJaw) * smoothFactor;
                     let camTarget = Math.max(0, Math.min(1.0, (sJaw - 0.003) / 0.035));
 
-                    // 基本は音声とカメラ、大きく反応している方を採用
+                    // 4. ハイブリッド（カメラの動きを少し強めに評価する）
                     let targetScaleMouth = Math.max(audioTarget, camTarget);
 
-                    // 【プロの技：子音ブロッカー（リップ・オーバーライド）】
-                    // 音量(audioTarget)が大きくても、実際の唇がほぼ閉じている(sJaw < 0.012)なら、
-                    // 「マ・パ・バ行」や「ん」の発音中とみなし、強制的にカメラの数値（閉じる）を優先する！
+                    // 5. 子音ブロッカー（ん・ま・ぱ行）
                     if (sJaw < 0.012) { 
-                        targetScaleMouth = camTarget; // 音声を強制キャンセル
+                        targetScaleMouth = camTarget;
                     }
 
-                    // ノイズゲート（無言時のピクピク防止）
-                    if (targetScaleMouth < 0.05) {
-                        targetScaleMouth = 0.0; 
-                    }
+                    if (targetScaleMouth < 0.05) targetScaleMouth = 0.0; 
 
-                    // アニメーション処理（開く時はパキッと、閉じる時は少し粘る）
+                    // 開閉アニメーション
                     if (targetScaleMouth > currentScaleMouth) {
-                        currentScaleMouth += (targetScaleMouth - currentScaleMouth) * 0.7; 
+                        currentScaleMouth += (targetScaleMouth - currentScaleMouth) * 0.6; 
                     } else {
-                        currentScaleMouth += (targetScaleMouth - currentScaleMouth) * 0.3; 
+                        currentScaleMouth += (targetScaleMouth - currentScaleMouth) * 0.15; 
                     }
                     
-                    // 適用 (0.02以下なら完全に閉じた画像に切り替え)
+                    // 適用（scale の引数に 横幅と縦幅 を両方入れる）
                     if (currentScaleMouth <= 0.02) {
                         mouthOpen.style.opacity = 0; mouthClose.style.opacity = 1;
-                        mouthClose.style.transform = partsXY;
+                        mouthClose.style.transform = partsXY; // 閉じた口は潰さない
                     } else {
                         mouthOpen.style.opacity = 1; mouthClose.style.opacity = 0;
-                        mouthOpen.style.transform = `${partsXY} scaleY(${currentScaleMouth})`;
+                        // ★ここで、擬似的な「い」「お」の横幅（currentScaleXMouth）を適用！
+                        mouthOpen.style.transform = `${partsXY} scale(${currentScaleXMouth}, ${currentScaleMouth})`;
                     }
 
                     // --- 眉毛 ---
