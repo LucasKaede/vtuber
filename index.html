@@ -3,26 +3,37 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>My VTuber Engine - Ultimate Smooth</title>
+    <title>My VTuber Engine - Precision Morphing</title>
     <style>
+        :root {
+            /* 
+             ======================================================
+             【超重要】パーツの圧縮（モーフィング）の基準点（高さ%）
+             ご自身の2000x2000イラストに合わせて、ここを微調整してください！
+             ======================================================
+            */
+            /* 目の下寄りに圧縮（上まぶたを下げる）ための基準点 */
+            /* 目がキャンバスの真ん中より少し上なら、45%〜48%あたりを探ってください */
+            --origin-eye-y: 48%; 
+            
+            /* 口の上寄りに圧縮（下唇を上げる）ための基準点 */
+            /* 口がキャンバスの下の方なら、60%〜65%あたりを探ってください */
+            --origin-mouth-y: 62%;
+        }
+
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { background: #1a1a24; overflow: hidden; display: flex; align-items: center; justify-content: center; height: 100vh; color: white; font-family: sans-serif; }
         
         #character-container { position: relative; width: 100vw; height: 100vh; display: flex; align-items: center; justify-content: center; }
 
-        /* 
-         【改善1】 transitionからopacityを外し、transform（移動と歪み）だけを滑らかにする。
-         これにより、目や口の切り替わり時に画像が重なる現象を防ぎます。
-        */
         .layer, .part-eye, .part-mouth, .part-brow {
             position: absolute; width: 100%; max-width: 800px; height: 100%; max-height: 800px;
             object-fit: contain;
-            transition: transform 0.05s ease-out; /* opacity は瞬時に切り替える */
+            transition: transform 0.05s ease-out;
             will-change: transform, opacity;
         }
 
         #layer-hair-back { z-index: 1; }
-        /* 【改善2】 首の回転軸をキャンバスの下の方（付け根）に設定 */
         #layer-neck { z-index: 2; transform-origin: center 90%; }
         #layer-body { z-index: 3; }
         
@@ -35,13 +46,11 @@
         #layer-nose { z-index: 6; }
         
         /* 
-         【改善3の仕込み】 
-         キャンバス全体を潰した時に、顔の中心に向かってパーツが移動してしまうのを防ぐため、
-         「目の高さ（大体上から45%）」「口の高さ（大体上から65%）」をスケールの基準点にします。
-         ※もし瞬きで目が上下にズレる場合は、この 45% や 65% の数値を調整してください。
+         ここで先ほど設定した変数を読み込み、圧縮の起点を固定します。
+         scaleY（上下圧縮）は、この起点を中心に行われます。
         */
-        .part-eye { z-index: 7; transform-origin: center 45%; }
-        .part-mouth { z-index: 7; transform-origin: center 65%; }
+        .part-eye { z-index: 7; transform-origin: center var(--origin-eye-y); }
+        .part-mouth { z-index: 7; transform-origin: center var(--origin-mouth-y); }
         .part-brow { z-index: 7; }
         
         #layer-hair-front { z-index: 10; }
@@ -119,7 +128,7 @@
                     faceMesh.onResults(onResults);
                     const camera = new Camera(video, { onFrame: async () => { await faceMesh.send({image: video}); }, width: 480, height: 640 });
                     await camera.start();
-                    video.style.display = "block"; startBtn.style.display = "none"; statusText.textContent = "稼働中 (モーフィング対応版)";
+                    video.style.display = "block"; startBtn.style.display = "none"; statusText.textContent = "稼働中 (微調整対応・垂直モーフィング)";
                 } catch (error) {
                     statusText.textContent = "カメラエラー";
                 }
@@ -140,7 +149,6 @@
                     sPitch += (((lms[4].y - midY) / faceH - 0.1) - sPitch) * smoothFactor;
                     sRoll += ((-Math.atan2(lms[263].y - lms[33].y, lms[263].x - lms[33].x) * (180 / Math.PI)) - sRoll) * smoothFactor;
 
-                    // 【改善2】 首の曲がりすぎを解消 (0.4 -> 0.15 に大幅減)
                     headGroup.style.transform = `rotate(${sRoll}deg) translate(${sYaw * 15}px, ${sPitch * 15}px)`;
                     neck.style.transform = `rotate(${sRoll * 0.15}deg) translate(${sYaw * 6}px, ${sPitch * 6}px)`;
                     body.style.transform = `rotate(${sRoll * 0.05}deg) translate(${sYaw * 2}px, ${sPitch * 2}px)`;
@@ -150,27 +158,22 @@
                     nose.style.transform = `translate(${sYaw * 25}px, ${sPitch * 20}px)`;
                     hairFront.style.transform = `translate(${sYaw * 40}px, ${sPitch * 25}px)`;
 
-                    // ==========================================
-                    // 【改善3】 目と口の滑らかな歪み（モーフィング）処理
-                    // ==========================================
                     const partsXY = `translate(${sYaw * 15}px, ${sPitch * 15}px)`;
 
-                    // --- 左目の処理 ---
+                    // --- 左目 ---
                     sEarL += ((getDist(lms[159], lms[145]) / getDist(lms[133], lms[33])) - sEarL) * smoothFactor;
-                    // 開き具合を 0(完全閉) ～ 1(全開) の割合に変換
                     const ratioEyeL = Math.max(0, Math.min(1, (sEarL - 0.09) / 0.05));
                     
                     if (ratioEyeL <= 0.1) {
-                        // ほぼ閉じている時は close 画像のみ表示
                         eyeLOpen.style.opacity = 0; eyeLClose.style.opacity = 1;
                         eyeLClose.style.transform = partsXY;
                     } else {
-                        // 開いている間は open 画像を縦に潰して（scaleY）表示
+                        // scaleYのみを適用。起点はCSS変数で指定した位置になります。
                         eyeLOpen.style.opacity = 1; eyeLClose.style.opacity = 0;
                         eyeLOpen.style.transform = `${partsXY} scaleY(${ratioEyeL})`;
                     }
 
-                    // --- 右目の処理 ---
+                    // --- 右目 ---
                     sEarR += ((getDist(lms[386], lms[374]) / getDist(lms[362], lms[263])) - sEarR) * smoothFactor;
                     const ratioEyeR = Math.max(0, Math.min(1, (sEarR - 0.09) / 0.05));
                     
@@ -182,21 +185,19 @@
                         eyeROpen.style.transform = `${partsXY} scaleY(${ratioEyeR})`;
                     }
 
-                    // --- 口の処理 ---
+                    // --- 口 ---
                     sJaw += ((getDist(lms[13], lms[14]) / faceH) - sJaw) * smoothFactor;
                     const ratioMouth = Math.max(0, Math.min(1, (sJaw - 0.02) / 0.05));
                     
                     if (ratioMouth <= 0.1) {
-                        // 閉じている時は close 画像
                         mouthOpen.style.opacity = 0; mouthClose.style.opacity = 1;
                         mouthClose.style.transform = partsXY;
                     } else {
-                        // 開くにつれて open 画像が縦に伸びる
                         mouthOpen.style.opacity = 1; mouthClose.style.opacity = 0;
                         mouthOpen.style.transform = `${partsXY} scaleY(${ratioMouth})`;
                     }
 
-                    // --- 眉毛の処理 ---
+                    // --- 眉毛 ---
                     const browElev = (lms[159].y - lms[105].y) / faceH;
                     const bY = (0.13 - browElev) * 200;
                     browL.style.transform = `translate(${sYaw * 15}px, ${sPitch * 15 + bY}px)`;
