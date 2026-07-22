@@ -200,20 +200,27 @@
                     else { eyeROpen.style.opacity = 1; eyeRClose.style.opacity = 0; eyeROpen.style.transform = `${partsXY} scaleY(${currentScaleR})`; }
 
                     // =====================================
-                    // 母音（い・お）と、開きっぱなし防止の実装
+                    // 1. 口の横幅（い・お）の過剰トラッキング
                     // =====================================
-                    
-                    // 1. 口の横幅（い・お）の判定
-                    // lms[61]とlms[291]は口の左右の端の座標です
                     sMouthW += ((getDist(lms[61], lms[291]) / faceW) - sMouthW) * smoothFactor;
                     
                     let targetScaleXMouth = 1.0;
-                    if (sMouthW > 0.23) {
-                        targetScaleXMouth = 1.15; // 「い」「え」など横に広げた時は画像を横に伸ばす
-                    } else if (sMouthW < 0.19) {
-                        targetScaleXMouth = 0.8;  // 「お」「う」などすぼめた時は画像を細くする
+                    
+                    // 【お・う 行の過剰キャッチ】
+                    // 以前(0.19)より判定を甘くし(0.195)、少しでもすぼめたら即座に反応させます。
+                    // 変形量は 0.8 から「0.45（本来の横幅の半分以下）」という極端なタコ口に潰します。
+                    if (sMouthW < 0.195) {
+                        targetScaleXMouth = 0.45; 
+                    } 
+                    // 【い・え 行の過剰キャッチ】
+                    // 少し口角を横に引いただけで反応させます。
+                    // 変形量は 1.15 から「1.35（本来の1.35倍）」まで大きく引き伸ばします。
+                    else if (sMouthW > 0.225) {
+                        targetScaleXMouth = 1.35;
                     }
-                    currentScaleXMouth += (targetScaleXMouth - currentScaleXMouth) * 0.4;
+
+                    // 横幅の変形スピードも、縦幅の俊敏さに負けないように爆速（0.4 → 0.75）にアップ
+                    currentScaleXMouth += (targetScaleXMouth - currentScaleXMouth) * 0.75;
 
                     // 2. 音量のカーブ化（開きっぱなし防止）
                     // 以前はリニア（直線）でしたが、今回は2乗（カーブ）にしました。
