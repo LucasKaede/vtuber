@@ -2,179 +2,204 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>Live2D レイヤー構造 3D分解図</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My VTuber Engine</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { background: #1a1a24; overflow: hidden; font-family: 'Segoe UI', sans-serif; color: white; }
+        body { background: #1a1a24; overflow: hidden; display: flex; align-items: center; justify-content: center; height: 100vh; color: white; font-family: sans-serif; }
         
-        #controls {
-            position: absolute; top: 20px; left: 20px; z-index: 999;
-            background: rgba(0,0,0,0.7); padding: 20px; border-radius: 10px; border: 1px solid #00d4ff;
-        }
-        button {
-            padding: 15px 30px; background: #00d4ff; color: #000; border: none;
-            border-radius: 5px; font-weight: bold; font-size: 1rem; cursor: pointer;
-            box-shadow: 0 0 15px rgba(0, 212, 255, 0.4);
-        }
-        button:active { transform: scale(0.95); }
-        
-        #scene {
-            perspective: 1500px;
-            width: 100vw; height: 100vh;
-            display: flex; align-items: center; justify-content: center;
-        }
-        
-        #wrapper {
-            width: 600px; height: 600px;
-            transform-style: preserve-3d;
-            transition: transform 1.5s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-        
-        /* 【展開状態】（アイソメトリックビュー） */
-        .state-exploded #wrapper {
-            transform: rotateX(60deg) rotateZ(-45deg) translateY(100px);
-        }
-        /* 【結合状態】（正面ビュー） */
-        .state-flat #wrapper {
-            transform: rotateX(0deg) rotateZ(0deg) translateY(0px);
+        #character-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
+        /* 
+         すべてのパーツは同じキャンバスサイズで出力されている前提なので、
+         中央にピッタリ重ねるだけで正しい位置に配置されます。
+        */
         .layer {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            transform-style: preserve-3d;
-            transition: transform 1.5s cubic-bezier(0.4, 0, 0.2, 1);
+            position: absolute;
+            width: 100%; max-width: 800px; /* 画面に合わせて調整 */
+            height: 100%; max-height: 800px;
+            object-fit: contain;
+            transition: transform 0.1s ease-out;
+            will-change: transform, opacity;
         }
 
-        /* 展開時のそれぞれの高さ（Z軸） */
-        .state-exploded .l7 { transform: translateZ(300px); }
-        .state-exploded .l6 { transform: translateZ(200px); }
-        .state-exploded .l5 { transform: translateZ(100px); }
-        .state-exploded .l4 { transform: translateZ(20px); }
-        .state-exploded .l3 { transform: translateZ(-50px); }
-        .state-exploded .l2 { transform: translateZ(-150px); }
-        .state-exploded .l1 { transform: translateZ(-250px); }
-
-        /* 結合時はすべて同じ高さ（0）に */
-        .state-flat .layer { transform: translateZ(0px); }
+        /* 重ね順（Z-index）の指定 */
+        #layer-hair-back { z-index: 1; }
+        #layer-neck { z-index: 2; }
+        #layer-body { z-index: 3; }
         
-        /* 結合時はSVGに少し影をつけて馴染ませる */
-        .state-flat svg { filter: drop-shadow(0 5px 15px rgba(0,0,0,0.5)); }
-
-        .tag {
-            font-size: 18px; font-weight: bold; fill: #00d4ff;
-            opacity: 0; transition: opacity 1s 0.5s;
+        /* 頭グループ（顔全体が動く） */
+        #head-group {
+            position: absolute;
+            width: 100%; max-width: 800px;
+            height: 100%; max-height: 800px;
+            z-index: 4;
+            transition: transform 0.1s ease-out;
+            transform-origin: center 60%; /* 首の付け根あたりを回転軸に */
         }
-        /* 展開時のみレイヤー名のテキストを表示する */
-        .state-exploded .tag { opacity: 1; }
+
+        #layer-face { z-index: 5; }
+        #layer-nose { z-index: 6; }
+        
+        /* 表情パーツ（目はデフォルトでopenを表示、closeは非表示） */
+        .eye-close, .mouth-open { opacity: 0; } 
+        
+        .part-eye, .part-mouth, .part-brow { z-index: 7; position: absolute; width: 100%; height: 100%; object-fit: contain; }
+        
+        #layer-hair-front { z-index: 10; }
+
+        #controls { position: absolute; bottom: 30px; text-align: center; z-index: 999; }
+        .btn { padding: 15px 40px; background: #00d4ff; color: #000; border: none; border-radius: 50px; font-weight: bold; font-size: 1.1rem; cursor: pointer; box-shadow: 0 0 15px rgba(0, 212, 255, 0.4); transition: 0.1s;}
+        .btn:active { transform: scale(0.95); }
+        
+        #webcam { position: absolute; top: 20px; right: 20px; width: 100px; height: 130px; border-radius: 8px; transform: scaleX(-1); opacity: 0.3; z-index: 999; pointer-events: none;}
     </style>
+    
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
 </head>
 <body>
 
-    <div id="controls">
-        <h3 style="margin-bottom:10px; color:#00d4ff;">レイヤー構造ビューワー</h3>
-        <p style="margin-bottom:15px; font-size:0.9rem; color:#aaa;">
-            なぜ顔を細かく分けるのか？<br>ボタンを押して立体構造を確認してください。
-        </p>
-        <button onclick="toggleView()">展開 / 結合 を切り替え</button>
-    </div>
+    <video id="webcam" autoplay playsinline muted></video>
 
-    <!-- 初期状態は展開（exploded） -->
-    <div id="scene" class="state-exploded">
-        <div id="wrapper">
+    <!-- キャラクター表示エリア -->
+    <div id="character-container">
+        <!-- 背景・体 -->
+        <img id="layer-hair-back" class="layer" src="hair_back.png">
+        <img id="layer-neck" class="layer" src="neck.png">
+        <img id="layer-body" class="layer" src="body.png">
+        
+        <!-- 頭部グループ -->
+        <div id="head-group">
+            <img id="layer-face" class="layer" src="face.png">
+            <img id="layer-nose" class="layer" src="nose.png">
             
-            <!-- 1. 後ろ髪 -->
-            <div class="layer l1">
-                <svg viewBox="0 0 600 600">
-                    <circle cx="300" cy="270" r="140" fill="#2c3e50"/>
-                    <text class="tag" x="460" y="270">1. hair_back (後ろ髪)</text>
-                </svg>
-            </div>
+            <!-- 左目（開・閉） -->
+            <img id="eye_l_open" class="part-eye eye-open" src="eye_l_open.png">
+            <img id="eye_l_close" class="part-eye eye-close" src="eye_l_close.png">
             
-            <!-- 2. 首と体 -->
-            <div class="layer l2">
-                <svg viewBox="0 0 600 600">
-                    <!-- 顔の裏に隠れる部分（上部）まで長く描くのがポイント -->
-                    <path d="M 270 200 L 270 420 L 330 420 L 330 200 Z" fill="#e8c3ad" />
-                    <!-- ジャケット -->
-                    <path d="M 150 550 L 200 400 L 400 400 L 450 550 Z" fill="#34495e" stroke="#1abc9c" stroke-width="3"/>
-                    <text class="tag" x="460" y="350">2. neck & body (長く描いた首)</text>
-                </svg>
-            </div>
+            <!-- 右目（開・閉） -->
+            <img id="eye_r_open" class="part-eye eye-open" src="eye_r_open.png">
+            <img id="eye_r_close" class="part-eye eye-close" src="eye_r_close.png">
             
-            <!-- 3. 顔ベース（のっぺらぼう） -->
-            <div class="layer l3">
-                <svg viewBox="0 0 600 600">
-                    <circle cx="200" cy="310" r="30" fill="#ffedd8" /> <!-- 左耳 -->
-                    <circle cx="400" cy="310" r="30" fill="#ffedd8" /> <!-- 右耳 -->
-                    <!-- ツルツルの肌 -->
-                    <path d="M 210 220 C 210 380, 250 450, 300 460 C 350 450, 390 380, 390 220 Z" fill="#ffedd8" />
-                    <text class="tag" x="460" y="310">3. face_base (のっぺらぼう肌＋耳)</text>
-                </svg>
-            </div>
-            
-            <!-- 4. 顔の輪郭線 -->
-            <div class="layer l4">
-                <svg viewBox="0 0 600 600">
-                    <!-- アゴのV字ライン。横を向いた時に立体感を出すための最重要パーツ -->
-                    <path d="M 210 310 C 210 380, 250 450, 300 460 C 350 450, 390 380, 390 310" fill="none" stroke="#d35400" stroke-width="5" stroke-linecap="round"/>
-                    <text class="tag" x="460" y="440">4. face_outline (アゴの輪郭線)</text>
-                </svg>
-            </div>
-            
-            <!-- 5. 顔のパーツ（目、口、鼻） -->
-            <div class="layer l5">
-                <svg viewBox="0 0 600 600">
-                    <!-- 左目 -->
-                    <path d="M 220 300 Q 250 270 280 300 Q 250 315 220 300 Z" fill="#fff" />
-                    <circle cx="250" cy="295" r="12" fill="#00d4ff" />
-                    <path d="M 215 295 Q 250 260 285 295" fill="none" stroke="#2c3e50" stroke-width="6" stroke-linecap="round"/>
-                    <!-- 右目 -->
-                    <path d="M 320 300 Q 350 270 380 300 Q 350 315 320 300 Z" fill="#fff" />
-                    <circle cx="350" cy="295" r="12" fill="#00d4ff" />
-                    <path d="M 315 295 Q 350 260 385 295" fill="none" stroke="#2c3e50" stroke-width="6" stroke-linecap="round"/>
-                    <!-- 口 -->
-                    <path d="M 285 400 Q 300 415 315 400" fill="none" stroke="#e74c3c" stroke-width="4" stroke-linecap="round"/>
-                    <!-- 鼻 -->
-                    <path d="M 300 340 L 295 360 L 300 365" fill="none" stroke="#d35400" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
-                    <text class="tag" x="460" y="300">5. face_parts (目・口・鼻)</text>
-                </svg>
-            </div>
+            <!-- 眉毛 -->
+            <img id="eye_l_brow" class="part-brow" src="eye_l_brow.png">
+            <img id="eye_r_brow" class="part-brow" src="eye_r_brow.png">
 
-            <!-- 6. 髪の落ち影 -->
-            <div class="layer l6">
-                <svg viewBox="0 0 600 600">
-                    <!-- 前髪の形に沿った、肌色の上に落ちる半透明の影 -->
-                    <path d="M 210 220 Q 260 260 300 230 Q 340 260 390 220 Q 370 320 340 300 Q 300 340 260 300 Z" fill="rgba(0,0,0,0.15)" />
-                    <text class="tag" x="460" y="230">6. shadow_hair (髪の落ち影)</text>
-                </svg>
-            </div>
-            
-            <!-- 7. 前髪 -->
-            <div class="layer l7">
-                <svg viewBox="0 0 600 600">
-                    <!-- 前髪と横髪 -->
-                    <path d="M 180 220 Q 240 250 300 220 Q 360 250 420 220 Q 430 350 380 360 Q 370 290 340 270 Q 300 330 260 270 Q 230 290 220 360 Q 170 350 180 220 Z" fill="#34495e" />
-                    <!-- 頭頂部 -->
-                    <path d="M 180 220 Q 240 140 300 160 Q 360 140 420 220 Q 300 90 180 220 Z" fill="#34495e" />
-                    <text class="tag" x="460" y="150">7. hair_front (前髪・横髪)</text>
-                </svg>
-            </div>
+            <!-- 口（開・閉） -->
+            <img id="mouth_close" class="part-mouth mouth-close" src="mouth_close.png">
+            <img id="mouth_open" class="part-mouth mouth-open" src="mouth_open.png">
 
+            <!-- 前髪 -->
+            <img id="layer-hair-front" class="layer" src="hair_front.png">
         </div>
     </div>
 
+    <div id="controls">
+        <button id="start-btn" class="btn">トラッキング開始</button>
+        <p id="status" style="margin-top:10px; font-weight: bold; color: #aaa;">カメラを許可してください</p>
+    </div>
+
     <script>
-        function toggleView() {
-            const scene = document.getElementById('scene');
-            // 状態のトグル
-            if (scene.classList.contains('state-exploded')) {
-                scene.classList.remove('state-exploded');
-                scene.classList.add('state-flat');
-            } else {
-                scene.classList.remove('state-flat');
-                scene.classList.add('state-exploded');
+        window.onload = () => {
+            const startBtn = document.getElementById("start-btn");
+            const statusText = document.getElementById("status");
+            const video = document.getElementById("webcam");
+            
+            // レイヤー取得
+            const headGroup = document.getElementById("head-group");
+            const hairBack = document.getElementById("layer-hair-back");
+            const face = document.getElementById("layer-face");
+            const nose = document.getElementById("layer-nose");
+            const hairFront = document.getElementById("layer-hair-front");
+            
+            // 表情パーツ取得
+            const eyeLOpen = document.getElementById("eye_l_open"); const eyeLClose = document.getElementById("eye_l_close");
+            const eyeROpen = document.getElementById("eye_r_open"); const eyeRClose = document.getElementById("eye_r_close");
+            const browL = document.getElementById("eye_l_brow"); const browR = document.getElementById("eye_r_brow");
+            const mouthClose = document.getElementById("mouth_close"); const mouthOpen = document.getElementById("mouth_open");
+
+            startBtn.addEventListener("click", async () => {
+                startBtn.disabled = true; statusText.textContent = "AIモデル読み込み中...";
+                try {
+                    const faceMesh = new FaceMesh({locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${f}`});
+                    faceMesh.setOptions({ maxNumFaces: 1, refineLandmarks: true, minDetectionConfidence: 0.6, minTrackingConfidence: 0.6 });
+                    faceMesh.onResults(onResults);
+
+                    const camera = new Camera(video, { onFrame: async () => { await faceMesh.send({image: video}); }, width: 480, height: 640 });
+                    await camera.start();
+                    video.style.display = "block";
+                    startBtn.style.display = "none";
+                    statusText.textContent = "稼働中 (高画質モード)";
+                } catch (error) {
+                    statusText.textContent = "カメラエラー";
+                }
+            });
+
+            function getDist(p1, p2) { return Math.hypot(p1.x - p2.x, p1.y - p2.y); }
+
+            function onResults(results) {
+                if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
+                    const lms = results.multiFaceLandmarks[0];
+                    
+                    // --- 1. 顔の向き（パララックス用） ---
+                    const faceW = getDist(lms[234], lms[454]);
+                    const faceH = getDist(lms[10], lms[152]);
+                    const midX = (lms[234].x + lms[454].x) / 2;
+                    const midY = (lms[10].y + lms[152].y) / 2;
+                    
+                    const yaw = (lms[4].x - midX) / faceW;
+                    const pitch = (lms[4].y - midY) / faceH - 0.1;
+                    const roll = -Math.atan2(lms[263].y - lms[33].y, lms[263].x - lms[33].x) * (180 / Math.PI);
+
+                    // 頭全体の回転と移動
+                    headGroup.style.transform = `rotate(${roll}deg) translate(${yaw * 15}px, ${pitch * 15}px)`;
+                    
+                    // パーツごとの奥行き（パララックス）
+                    hairBack.style.transform = `translate(${yaw * -20}px, ${pitch * -10}px)`; // 奥
+                    face.style.transform = `translate(${yaw * 5}px, ${pitch * 5}px)`; // 基準
+                    nose.style.transform = `translate(${yaw * 25}px, ${pitch * 20}px)`; // 少し手前
+                    hairFront.style.transform = `translate(${yaw * 40}px, ${pitch * 25}px)`; // 一番手前
+
+                    // 目、口、眉毛のパララックス（顔の向きに合わせる）
+                    const partsTransform = `translate(${yaw * 15}px, ${pitch * 15}px)`;
+                    eyeLOpen.style.transform = partsTransform; eyeLClose.style.transform = partsTransform;
+                    eyeROpen.style.transform = partsTransform; eyeRClose.style.transform = partsTransform;
+                    mouthClose.style.transform = partsTransform; mouthOpen.style.transform = partsTransform;
+
+                    // --- 2. まばたき（画像の切り替え） ---
+                    const earL = getDist(lms[159], lms[145]) / getDist(lms[133], lms[33]);
+                    const earR = getDist(lms[386], lms[374]) / getDist(lms[362], lms[263]);
+                    
+                    // EAR（目の開き具合）が閾値以下なら「閉じる」
+                    if (earL < 0.13) { eyeLOpen.style.opacity = 0; eyeLClose.style.opacity = 1; }
+                    else { eyeLOpen.style.opacity = 1; eyeLClose.style.opacity = 0; }
+                    
+                    if (earR < 0.13) { eyeROpen.style.opacity = 0; eyeRClose.style.opacity = 1; }
+                    else { eyeROpen.style.opacity = 1; eyeRClose.style.opacity = 0; }
+
+                    // --- 3. 眉毛の上下 ---
+                    const browElev = (lms[159].y - lms[105].y) / faceH;
+                    const bY = (0.13 - browElev) * 200; // 眉毛の可動域
+                    browL.style.transform = `translate(${yaw * 15}px, ${pitch * 15 + bY}px)`;
+                    browR.style.transform = `translate(${yaw * 15}px, ${pitch * 15 + bY}px)`;
+
+                    // --- 4. 口の開閉（画像の切り替え） ---
+                    const jawDrop = (getDist(lms[13], lms[14]) / faceH);
+                    
+                    // 口が一定以上開いたら「mouth_open」に切り替え
+                    if (jawDrop > 0.03) { mouthClose.style.opacity = 0; mouthOpen.style.opacity = 1; }
+                    else { mouthClose.style.opacity = 1; mouthOpen.style.opacity = 0; }
+                }
             }
-        }
+        };
     </script>
 </body>
 </html>
