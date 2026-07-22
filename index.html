@@ -3,53 +3,35 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>My VTuber Engine</title>
+    <title>My VTuber Engine - Smooth Update</title>
     <style>
+        /* CSSは前回とほぼ同じですが、連動させるためneckとbodyのwill-changeを追記 */
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { background: #1a1a24; overflow: hidden; display: flex; align-items: center; justify-content: center; height: 100vh; color: white; font-family: sans-serif; }
         
         #character-container {
-            position: relative;
-            width: 100vw;
-            height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            position: relative; width: 100vw; height: 100vh; display: flex; align-items: center; justify-content: center;
         }
 
-        /* 
-         すべてのパーツは同じキャンバスサイズで出力されている前提なので、
-         中央にピッタリ重ねるだけで正しい位置に配置されます。
-        */
         .layer {
-            position: absolute;
-            width: 100%; max-width: 800px; /* 画面に合わせて調整 */
-            height: 100%; max-height: 800px;
+            position: absolute; width: 100%; max-width: 800px; height: 100%; max-height: 800px;
             object-fit: contain;
-            transition: transform 0.1s ease-out;
+            transition: transform 0.05s ease-out; /* より機敏に */
             will-change: transform, opacity;
         }
 
-        /* 重ね順（Z-index）の指定 */
         #layer-hair-back { z-index: 1; }
-        #layer-neck { z-index: 2; }
+        #layer-neck { z-index: 2; transform-origin: center bottom; }
         #layer-body { z-index: 3; }
         
-        /* 頭グループ（顔全体が動く） */
         #head-group {
-            position: absolute;
-            width: 100%; max-width: 800px;
-            height: 100%; max-height: 800px;
-            z-index: 4;
-            transition: transform 0.1s ease-out;
-            transform-origin: center 60%; /* 首の付け根あたりを回転軸に */
+            position: absolute; width: 100%; max-width: 800px; height: 100%; max-height: 800px;
+            z-index: 4; transition: transform 0.05s ease-out;
+            transform-origin: center 60%;
         }
 
         #layer-face { z-index: 5; }
         #layer-nose { z-index: 6; }
-        
-        /* 表情パーツ（目はデフォルトでopenを表示、closeは非表示） */
-        .eye-close, .mouth-open { opacity: 0; } 
         
         .part-eye, .part-mouth, .part-brow { z-index: 7; position: absolute; width: 100%; height: 100%; object-fit: contain; }
         
@@ -69,35 +51,27 @@
 
     <video id="webcam" autoplay playsinline muted></video>
 
-    <!-- キャラクター表示エリア -->
     <div id="character-container">
-        <!-- 背景・体 -->
         <img id="layer-hair-back" class="layer" src="hair_back.png">
         <img id="layer-neck" class="layer" src="neck.png">
         <img id="layer-body" class="layer" src="body.png">
         
-        <!-- 頭部グループ -->
         <div id="head-group">
             <img id="layer-face" class="layer" src="face.png">
             <img id="layer-nose" class="layer" src="nose.png">
             
-            <!-- 左目（開・閉） -->
-            <img id="eye_l_open" class="part-eye eye-open" src="eye_l_open.png">
-            <img id="eye_l_close" class="part-eye eye-close" src="eye_l_close.png">
+            <img id="eye_l_open" class="part-eye" src="eye_l_open.png">
+            <img id="eye_l_close" class="part-eye" src="eye_l_close.png" style="opacity: 0;">
             
-            <!-- 右目（開・閉） -->
-            <img id="eye_r_open" class="part-eye eye-open" src="eye_r_open.png">
-            <img id="eye_r_close" class="part-eye eye-close" src="eye_r_close.png">
+            <img id="eye_r_open" class="part-eye" src="eye_r_open.png">
+            <img id="eye_r_close" class="part-eye" src="eye_r_close.png" style="opacity: 0;">
             
-            <!-- 眉毛 -->
             <img id="eye_l_brow" class="part-brow" src="eye_l_brow.png">
             <img id="eye_r_brow" class="part-brow" src="eye_r_brow.png">
 
-            <!-- 口（開・閉） -->
-            <img id="mouth_close" class="part-mouth mouth-close" src="mouth_close.png">
-            <img id="mouth_open" class="part-mouth mouth-open" src="mouth_open.png">
+            <img id="mouth_close" class="part-mouth" src="mouth_close.png">
+            <img id="mouth_open" class="part-mouth" src="mouth_open.png" style="opacity: 0;">
 
-            <!-- 前髪 -->
             <img id="layer-hair-front" class="layer" src="hair_front.png">
         </div>
     </div>
@@ -113,18 +87,27 @@
             const statusText = document.getElementById("status");
             const video = document.getElementById("webcam");
             
-            // レイヤー取得
             const headGroup = document.getElementById("head-group");
             const hairBack = document.getElementById("layer-hair-back");
+            const neck = document.getElementById("layer-neck");
+            const body = document.getElementById("layer-body");
             const face = document.getElementById("layer-face");
             const nose = document.getElementById("layer-nose");
             const hairFront = document.getElementById("layer-hair-front");
             
-            // 表情パーツ取得
             const eyeLOpen = document.getElementById("eye_l_open"); const eyeLClose = document.getElementById("eye_l_close");
             const eyeROpen = document.getElementById("eye_r_open"); const eyeRClose = document.getElementById("eye_r_close");
             const browL = document.getElementById("eye_l_brow"); const browR = document.getElementById("eye_r_brow");
             const mouthClose = document.getElementById("mouth_close"); const mouthOpen = document.getElementById("mouth_open");
+
+            // --- スムージング用の変数 ---
+            let sYaw = 0, sPitch = 0, sRoll = 0;
+            let sEarL = 0.15, sEarR = 0.15, sJaw = 0;
+            
+            // --- 現在の開閉状態を記憶する変数（ヒステリシス用） ---
+            let isEyeLOpen = true;
+            let isEyeROpen = true;
+            let isMouthOpen = false;
 
             startBtn.addEventListener("click", async () => {
                 startBtn.disabled = true; statusText.textContent = "AIモデル読み込み中...";
@@ -132,12 +115,9 @@
                     const faceMesh = new FaceMesh({locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${f}`});
                     faceMesh.setOptions({ maxNumFaces: 1, refineLandmarks: true, minDetectionConfidence: 0.6, minTrackingConfidence: 0.6 });
                     faceMesh.onResults(onResults);
-
                     const camera = new Camera(video, { onFrame: async () => { await faceMesh.send({image: video}); }, width: 480, height: 640 });
                     await camera.start();
-                    video.style.display = "block";
-                    startBtn.style.display = "none";
-                    statusText.textContent = "稼働中 (高画質モード)";
+                    video.style.display = "block"; startBtn.style.display = "none"; statusText.textContent = "稼働中 (滑らか補間モード)";
                 } catch (error) {
                     statusText.textContent = "カメラエラー";
                 }
@@ -149,54 +129,62 @@
                 if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
                     const lms = results.multiFaceLandmarks[0];
                     
-                    // --- 1. 顔の向き（パララックス用） ---
                     const faceW = getDist(lms[234], lms[454]);
                     const faceH = getDist(lms[10], lms[152]);
                     const midX = (lms[234].x + lms[454].x) / 2;
                     const midY = (lms[10].y + lms[152].y) / 2;
                     
-                    const yaw = (lms[4].x - midX) / faceW;
-                    const pitch = (lms[4].y - midY) / faceH - 0.1;
-                    const roll = -Math.atan2(lms[263].y - lms[33].y, lms[263].x - lms[33].x) * (180 / Math.PI);
-
-                    // 頭全体の回転と移動
-                    headGroup.style.transform = `rotate(${roll}deg) translate(${yaw * 15}px, ${pitch * 15}px)`;
+                    // --- 1. ノイズ除去（スムージング処理） ---
+                    // カメラの生データに対して 30% ずつ近づけることで、ブレを吸収する
+                    const smoothFactor = 0.3;
                     
-                    // パーツごとの奥行き（パララックス）
-                    hairBack.style.transform = `translate(${yaw * -20}px, ${pitch * -10}px)`; // 奥
-                    face.style.transform = `translate(${yaw * 5}px, ${pitch * 5}px)`; // 基準
-                    nose.style.transform = `translate(${yaw * 25}px, ${pitch * 20}px)`; // 少し手前
-                    hairFront.style.transform = `translate(${yaw * 40}px, ${pitch * 25}px)`; // 一番手前
+                    sYaw += (((lms[4].x - midX) / faceW) - sYaw) * smoothFactor;
+                    sPitch += (((lms[4].y - midY) / faceH - 0.1) - sPitch) * smoothFactor;
+                    sRoll += ((-Math.atan2(lms[263].y - lms[33].y, lms[263].x - lms[33].x) * (180 / Math.PI)) - sRoll) * smoothFactor;
 
-                    // 目、口、眉毛のパララックス（顔の向きに合わせる）
-                    const partsTransform = `translate(${yaw * 15}px, ${pitch * 15}px)`;
+                    // --- 2. 首と体の連動（首が座っているのを解消） ---
+                    // 頭の動きに対して、首は40%、体は10%だけ追従させることで背骨のしなりを表現
+                    headGroup.style.transform = `rotate(${sRoll}deg) translate(${sYaw * 15}px, ${sPitch * 15}px)`;
+                    neck.style.transform = `rotate(${sRoll * 0.4}deg) translate(${sYaw * 6}px, ${sPitch * 6}px)`;
+                    body.style.transform = `rotate(${sRoll * 0.1}deg) translate(${sYaw * 2}px, ${sPitch * 2}px)`;
+                    
+                    hairBack.style.transform = `translate(${sYaw * -20}px, ${sPitch * -10}px)`;
+                    face.style.transform = `translate(${sYaw * 5}px, ${sPitch * 5}px)`;
+                    nose.style.transform = `translate(${sYaw * 25}px, ${sPitch * 20}px)`;
+                    hairFront.style.transform = `translate(${sYaw * 40}px, ${sPitch * 25}px)`;
+
+                    const partsTransform = `translate(${sYaw * 15}px, ${sPitch * 15}px)`;
                     eyeLOpen.style.transform = partsTransform; eyeLClose.style.transform = partsTransform;
                     eyeROpen.style.transform = partsTransform; eyeRClose.style.transform = partsTransform;
                     mouthClose.style.transform = partsTransform; mouthOpen.style.transform = partsTransform;
 
-                    // --- 2. まばたき（画像の切り替え） ---
-                    const earL = getDist(lms[159], lms[145]) / getDist(lms[133], lms[33]);
-                    const earR = getDist(lms[386], lms[374]) / getDist(lms[362], lms[263]);
+                    // --- 3. 目のヒステリシス処理（かくつき解消） ---
+                    sEarL += ((getDist(lms[159], lms[145]) / getDist(lms[133], lms[33])) - sEarL) * smoothFactor;
+                    sEarR += ((getDist(lms[386], lms[374]) / getDist(lms[362], lms[263])) - sEarR) * smoothFactor;
                     
-                    // EAR（目の開き具合）が閾値以下なら「閉じる」
-                    if (earL < 0.13) { eyeLOpen.style.opacity = 0; eyeLClose.style.opacity = 1; }
-                    else { eyeLOpen.style.opacity = 1; eyeLClose.style.opacity = 0; }
+                    // 「閉じる」時と「開く」時のラインを変えることで、パカパカを防ぐ
+                    if (isEyeLOpen && sEarL < 0.11) isEyeLOpen = false;       // 深く閉じたら「閉」
+                    else if (!isEyeLOpen && sEarL > 0.13) isEyeLOpen = true;  // しっかり開けたら「開」
                     
-                    if (earR < 0.13) { eyeROpen.style.opacity = 0; eyeRClose.style.opacity = 1; }
-                    else { eyeROpen.style.opacity = 1; eyeRClose.style.opacity = 0; }
+                    if (isEyeROpen && sEarR < 0.11) isEyeROpen = false;
+                    else if (!isEyeROpen && sEarR > 0.13) isEyeROpen = true;
 
-                    // --- 3. 眉毛の上下 ---
+                    eyeLOpen.style.opacity = isEyeLOpen ? 1 : 0; eyeLClose.style.opacity = isEyeLOpen ? 0 : 1;
+                    eyeROpen.style.opacity = isEyeROpen ? 1 : 0; eyeRClose.style.opacity = isEyeROpen ? 0 : 1;
+
+                    // --- 4. 口のヒステリシス処理（かくつき解消） ---
+                    sJaw += ((getDist(lms[13], lms[14]) / faceH) - sJaw) * smoothFactor;
+                    
+                    if (!isMouthOpen && sJaw > 0.04) isMouthOpen = true;      // しっかり開いたら「開」
+                    else if (isMouthOpen && sJaw < 0.02) isMouthOpen = false; // ちゃんと閉じたら「閉」
+
+                    mouthClose.style.opacity = isMouthOpen ? 0 : 1; mouthOpen.style.opacity = isMouthOpen ? 1 : 0;
+
+                    // --- 5. 眉毛の上下（ノイズ除去適用済み） ---
                     const browElev = (lms[159].y - lms[105].y) / faceH;
-                    const bY = (0.13 - browElev) * 200; // 眉毛の可動域
-                    browL.style.transform = `translate(${yaw * 15}px, ${pitch * 15 + bY}px)`;
-                    browR.style.transform = `translate(${yaw * 15}px, ${pitch * 15 + bY}px)`;
-
-                    // --- 4. 口の開閉（画像の切り替え） ---
-                    const jawDrop = (getDist(lms[13], lms[14]) / faceH);
-                    
-                    // 口が一定以上開いたら「mouth_open」に切り替え
-                    if (jawDrop > 0.03) { mouthClose.style.opacity = 0; mouthOpen.style.opacity = 1; }
-                    else { mouthClose.style.opacity = 1; mouthOpen.style.opacity = 0; }
+                    const bY = (0.13 - browElev) * 200;
+                    browL.style.transform = `translate(${sYaw * 15}px, ${sPitch * 15 + bY}px)`;
+                    browR.style.transform = `translate(${sYaw * 15}px, ${sPitch * 15 + bY}px)`;
                 }
             }
         };
