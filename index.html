@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>My VTuber Engine - Binary Smooth Eyes</title>
+    <title>My VTuber Engine - 3-State Mouth & Better Eyes</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { background: #1a1a24; overflow: hidden; display: flex; align-items: center; justify-content: center; height: 100vh; color: white; font-family: sans-serif; }
@@ -13,7 +13,6 @@
             display: flex; align-items: center; justify-content: center; 
         }
 
-        /* SP環境でも絶対にズレないための正方形固定ラッパー */
         #avatar-wrapper {
             position: relative;
             width: 100%; 
@@ -39,13 +38,11 @@
         #layer-face { z-index: 5; }
         #layer-nose { z-index: 6; }
         
-        /* 目・口・眉からはCSS transitionを外し、JSで滑らかさを完全制御する */
         .part-eye, .part-mouth, .part-brow {
             position: absolute; width: 100%; height: 100%; top: 0; left: 0;
             will-change: transform, opacity;
         }
 
-        /* PC・SP共通の完璧な圧縮基準点 */
         .part-eye { z-index: 7; transform-origin: center 35%; } 
         .part-mouth { z-index: 7; transform-origin: center 44%; } 
         .part-brow { z-index: 7; }
@@ -119,11 +116,13 @@
             let sYaw = 0, sPitch = 0, sRoll = 0;
             let sEarL = 0.15, sEarR = 0.15, sJaw = 0;
 
-            // 【新機能】目の2択状態と、現在のアニメーション状態を記憶する変数
             let isEyeLOpen = true;
             let isEyeROpen = true;
             let currentScaleL = 1.0;
             let currentScaleR = 1.0;
+            
+            // 口のアニメーション用変数
+            let currentScaleMouth = 0.0;
 
             startBtn.addEventListener("click", async () => {
                 startBtn.disabled = true; statusText.textContent = "AIモデル読み込み中...";
@@ -133,7 +132,7 @@
                     faceMesh.onResults(onResults);
                     const camera = new Camera(video, { onFrame: async () => { await faceMesh.send({image: video}); }, width: 480, height: 640 });
                     await camera.start();
-                    video.style.display = "block"; startBtn.style.display = "none"; statusText.textContent = "稼働中 (ピクピク解消 2択アニメーション版)";
+                    video.style.display = "block"; startBtn.style.display = "none"; statusText.textContent = "稼働中 (3ステート・リップシンク)";
                 } catch (error) {
                     statusText.textContent = "カメラエラー";
                 }
@@ -164,29 +163,24 @@
                     hairFront.style.transform = `translate(${sYaw * 40}px, ${sPitch * 25}px)`;
 
                     const partsXY = `translate(${sYaw * 15}px, ${sPitch * 15}px)`;
-
-                    // =====================================
-                    // 目の処理（2択振り切り ＋ JS滑らかアニメーション）
-                    // =====================================
-                    // アニメーションのスピード（1.0で即時、数値を下げるほどゆっくり閉じる）
-                    const blinkSpeed = 0.5; 
                     
-                    // --- 左目 ---
+                    const animSpeed = 0.5; // アニメーション速度
+                    
+                    // =====================================
+                    // 目の処理（閉じる判定を甘く変更）
+                    // =====================================
                     sEarL += ((getDist(lms[159], lms[145]) / getDist(lms[133], lms[33])) - sEarL) * smoothFactor;
                     
-                    // 1. カメラの数値から「開けるべきか、閉じるべきか」の2択だけを判断する
-                    if (isEyeLOpen && sEarL < 0.055) isEyeLOpen = false;       // 閉じる！
-                    else if (!isEyeLOpen && sEarL > 0.075) isEyeLOpen = true;  // 開く！
+                    // 0.055 -> 0.09 に引き上げ（少し目が細まるだけで「閉じた」と判定）
+                    if (isEyeLOpen && sEarL < 0.09) isEyeLOpen = false;       
+                    // 0.075 -> 0.11 に引き上げ（しっかり目を開けないと「開いた」と判定しない）
+                    else if (!isEyeLOpen && sEarL > 0.11) isEyeLOpen = true;  
 
-                    // 2. ターゲットの倍率をセット（開=1.0, 閉=0.0 のどちらかしか存在しない）
                     const targetScaleL = isEyeLOpen ? 1.0 : 0.0;
-                    
-                    // 3. 現在の倍率をターゲットに向かって滑らかに近づける（ここでアニメーションになる）
-                    currentScaleL += (targetScaleL - currentScaleL) * blinkSpeed;
+                    currentScaleL += (targetScaleL - currentScaleL) * animSpeed;
 
                     const angleL = -5; // 左目の斜め圧縮
 
-                    // 完全に閉じきった時だけ画像切り替え
                     if (currentScaleL <= 0.05) {
                         eyeLOpen.style.opacity = 0; eyeLClose.style.opacity = 1;
                         eyeLClose.style.transform = partsXY; 
@@ -198,11 +192,11 @@
                     // --- 右目 ---
                     sEarR += ((getDist(lms[386], lms[374]) / getDist(lms[362], lms[263])) - sEarR) * smoothFactor;
                     
-                    if (isEyeROpen && sEarR < 0.055) isEyeROpen = false;
-                    else if (!isEyeROpen && sEarR > 0.075) isEyeROpen = true;
+                    if (isEyeROpen && sEarR < 0.09) isEyeROpen = false;
+                    else if (!isEyeROpen && sEarR > 0.11) isEyeROpen = true;
 
                     const targetScaleR = isEyeROpen ? 1.0 : 0.0;
-                    currentScaleR += (targetScaleR - currentScaleR) * blinkSpeed;
+                    currentScaleR += (targetScaleR - currentScaleR) * animSpeed;
 
                     if (currentScaleR <= 0.05) {
                         eyeROpen.style.opacity = 0; eyeRClose.style.opacity = 1;
@@ -213,17 +207,28 @@
                     }
 
                     // =====================================
-                    // 口の処理（口は連続で動かした方が喋りが自然なため、高感度設定を維持）
+                    // 【新】口の処理（3ステート・アニメーション）
                     // =====================================
                     sJaw += ((getDist(lms[13], lms[14]) / faceH) - sJaw) * smoothFactor;
-                    const ratioMouth = Math.max(0, Math.min(1, (sJaw - 0.005) / 0.03));
                     
-                    if (ratioMouth <= 0.02) {
+                    let targetScaleMouth = 0.0; // デフォルトは「閉じる(0%)」
+                    
+                    // 3段階の口の開き具合を判定
+                    if (sJaw > 0.035) {
+                        targetScaleMouth = 1.0; // 「あ」「お」などの大口（100%）
+                    } else if (sJaw > 0.015) {
+                        targetScaleMouth = 0.5; // 「い」「え」などの半開き（50%）
+                    }
+
+                    // 目と同じように、ターゲットに向かって滑らかにアニメーションさせる
+                    currentScaleMouth += (targetScaleMouth - currentScaleMouth) * animSpeed;
+                    
+                    if (currentScaleMouth <= 0.02) {
                         mouthOpen.style.opacity = 0; mouthClose.style.opacity = 1;
                         mouthClose.style.transform = partsXY;
                     } else {
                         mouthOpen.style.opacity = 1; mouthClose.style.opacity = 0;
-                        mouthOpen.style.transform = `${partsXY} scaleY(${ratioMouth})`;
+                        mouthOpen.style.transform = `${partsXY} scaleY(${currentScaleMouth})`;
                     }
 
                     // --- 眉毛 ---
