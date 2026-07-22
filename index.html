@@ -3,30 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>My VTuber Engine - Precision Morphing</title>
+    <title>My VTuber Engine - Ultimate Perfect</title>
     <style>
-        :root {
-            /* 
-             ======================================================
-             【超重要】パーツの圧縮（モーフィング）の基準点（高さ%）
-             ご自身の2000x2000イラストに合わせて、ここを微調整してください！
-             ======================================================
-            */
-            /* 目の下寄りに圧縮（上まぶたを下げる）ための基準点 */
-            /* 目がキャンバスの真ん中より少し上なら、45%〜48%あたりを探ってください */
-            --origin-eye-y: 35%; 
-            
-            /* 口の上寄りに圧縮（下唇を上げる）ための基準点 */
-            /* 口がキャンバスの下の方なら、60%〜65%あたりを探ってください */
-            --origin-mouth-y: 44%;
-        }
-
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { background: #1a1a24; overflow: hidden; display: flex; align-items: center; justify-content: center; height: 100vh; color: white; font-family: sans-serif; }
         
         #character-container { position: relative; width: 100vw; height: 100vh; display: flex; align-items: center; justify-content: center; }
 
-        .layer, .part-eye, .part-mouth, .part-brow {
+        /* 滑らかなパララックス用のtransition（頭と体のみ） */
+        .layer {
             position: absolute; width: 100%; max-width: 800px; height: 100%; max-height: 800px;
             object-fit: contain;
             transition: transform 0.05s ease-out;
@@ -45,12 +30,16 @@
         #layer-face { z-index: 5; }
         #layer-nose { z-index: 6; }
         
-        /* 
-         ここで先ほど設定した変数を読み込み、圧縮の起点を固定します。
-         scaleY（上下圧縮）は、この起点を中心に行われます。
-        */
-        .part-eye { z-index: 7; transform-origin: center var(--origin-eye-y); }
-        .part-mouth { z-index: 7; transform-origin: center var(--origin-mouth-y); }
+        /* 表情パーツはtransitionを外し、即時変形（歪み防止） */
+        .part-eye, .part-mouth, .part-brow {
+            position: absolute; width: 100%; max-width: 800px; height: 100%; max-height: 800px;
+            object-fit: contain;
+            will-change: transform, opacity;
+        }
+
+        /* 導き出した最適値（圧縮の基準点） */
+        .part-eye { z-index: 7; transform-origin: center 35%; } 
+        .part-mouth { z-index: 7; transform-origin: center 44%; } 
         .part-brow { z-index: 7; }
         
         #layer-hair-front { z-index: 10; }
@@ -128,7 +117,7 @@
                     faceMesh.onResults(onResults);
                     const camera = new Camera(video, { onFrame: async () => { await faceMesh.send({image: video}); }, width: 480, height: 640 });
                     await camera.start();
-                    video.style.display = "block"; startBtn.style.display = "none"; statusText.textContent = "稼働中 (微調整対応・垂直モーフィング)";
+                    video.style.display = "block"; startBtn.style.display = "none"; statusText.textContent = "稼働中 (完全版)";
                 } catch (error) {
                     statusText.textContent = "カメラエラー";
                 }
@@ -144,15 +133,17 @@
                     const midX = (lms[234].x + lms[454].x) / 2;
                     const midY = (lms[10].y + lms[152].y) / 2;
                     
-                    const smoothFactor = 0.3;
+                    const smoothFactor = 0.4;
                     sYaw += (((lms[4].x - midX) / faceW) - sYaw) * smoothFactor;
                     sPitch += (((lms[4].y - midY) / faceH - 0.1) - sPitch) * smoothFactor;
                     sRoll += ((-Math.atan2(lms[263].y - lms[33].y, lms[263].x - lms[33].x) * (180 / Math.PI)) - sRoll) * smoothFactor;
 
+                    // 体としなり
                     headGroup.style.transform = `rotate(${sRoll}deg) translate(${sYaw * 15}px, ${sPitch * 15}px)`;
                     neck.style.transform = `rotate(${sRoll * 0.15}deg) translate(${sYaw * 6}px, ${sPitch * 6}px)`;
                     body.style.transform = `rotate(${sRoll * 0.05}deg) translate(${sYaw * 2}px, ${sPitch * 2}px)`;
                     
+                    // パララックス（立体感）
                     hairBack.style.transform = `translate(${sYaw * -20}px, ${sPitch * -10}px)`;
                     face.style.transform = `translate(${sYaw * 5}px, ${sPitch * 5}px)`;
                     nose.style.transform = `translate(${sYaw * 25}px, ${sPitch * 20}px)`;
@@ -160,20 +151,21 @@
 
                     const partsXY = `translate(${sYaw * 15}px, ${sPitch * 15}px)`;
 
-                    // --- 左目 ---
+                    // --- 左目（斜め圧縮対応） ---
                     sEarL += ((getDist(lms[159], lms[145]) / getDist(lms[133], lms[33])) - sEarL) * smoothFactor;
                     const ratioEyeL = Math.max(0, Math.min(1, (sEarL - 0.09) / 0.05));
                     
+                    const angleL = -5; // ★ここで左目の斜め具合を調整できます
+
                     if (ratioEyeL <= 0.1) {
                         eyeLOpen.style.opacity = 0; eyeLClose.style.opacity = 1;
-                        eyeLClose.style.transform = partsXY;
+                        eyeLClose.style.transform = partsXY; 
                     } else {
-                        // scaleYのみを適用。起点はCSS変数で指定した位置になります。
                         eyeLOpen.style.opacity = 1; eyeLClose.style.opacity = 0;
-                        eyeLOpen.style.transform = `${partsXY} scaleY(${ratioEyeL})`;
+                        eyeLOpen.style.transform = `${partsXY} rotate(${angleL}deg) scaleY(${ratioEyeL}) rotate(${-angleL}deg)`;
                     }
 
-                    // --- 右目 ---
+                    // --- 右目（通常の上下圧縮） ---
                     sEarR += ((getDist(lms[386], lms[374]) / getDist(lms[362], lms[263])) - sEarR) * smoothFactor;
                     const ratioEyeR = Math.max(0, Math.min(1, (sEarR - 0.09) / 0.05));
                     
@@ -185,7 +177,7 @@
                         eyeROpen.style.transform = `${partsXY} scaleY(${ratioEyeR})`;
                     }
 
-                    // --- 口 ---
+                    // --- 口（通常の上下圧縮） ---
                     sJaw += ((getDist(lms[13], lms[14]) / faceH) - sJaw) * smoothFactor;
                     const ratioMouth = Math.max(0, Math.min(1, (sJaw - 0.02) / 0.05));
                     
