@@ -3,44 +3,52 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>My VTuber Engine - Smooth Update</title>
+    <title>My VTuber Engine - Ultimate Smooth</title>
     <style>
-        /* CSSは前回とほぼ同じですが、連動させるためneckとbodyのwill-changeを追記 */
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { background: #1a1a24; overflow: hidden; display: flex; align-items: center; justify-content: center; height: 100vh; color: white; font-family: sans-serif; }
         
-        #character-container {
-            position: relative; width: 100vw; height: 100vh; display: flex; align-items: center; justify-content: center;
-        }
+        #character-container { position: relative; width: 100vw; height: 100vh; display: flex; align-items: center; justify-content: center; }
 
-        .layer {
+        /* 
+         【改善1】 transitionからopacityを外し、transform（移動と歪み）だけを滑らかにする。
+         これにより、目や口の切り替わり時に画像が重なる現象を防ぎます。
+        */
+        .layer, .part-eye, .part-mouth, .part-brow {
             position: absolute; width: 100%; max-width: 800px; height: 100%; max-height: 800px;
             object-fit: contain;
-            transition: transform 0.05s ease-out; /* より機敏に */
+            transition: transform 0.05s ease-out; /* opacity は瞬時に切り替える */
             will-change: transform, opacity;
         }
 
         #layer-hair-back { z-index: 1; }
-        #layer-neck { z-index: 2; transform-origin: center bottom; }
+        /* 【改善2】 首の回転軸をキャンバスの下の方（付け根）に設定 */
+        #layer-neck { z-index: 2; transform-origin: center 90%; }
         #layer-body { z-index: 3; }
         
         #head-group {
             position: absolute; width: 100%; max-width: 800px; height: 100%; max-height: 800px;
-            z-index: 4; transition: transform 0.05s ease-out;
-            transform-origin: center 60%;
+            z-index: 4; transition: transform 0.05s ease-out; transform-origin: center 60%;
         }
 
         #layer-face { z-index: 5; }
         #layer-nose { z-index: 6; }
         
-        .part-eye, .part-mouth, .part-brow { z-index: 7; position: absolute; width: 100%; height: 100%; object-fit: contain; }
+        /* 
+         【改善3の仕込み】 
+         キャンバス全体を潰した時に、顔の中心に向かってパーツが移動してしまうのを防ぐため、
+         「目の高さ（大体上から45%）」「口の高さ（大体上から65%）」をスケールの基準点にします。
+         ※もし瞬きで目が上下にズレる場合は、この 45% や 65% の数値を調整してください。
+        */
+        .part-eye { z-index: 7; transform-origin: center 45%; }
+        .part-mouth { z-index: 7; transform-origin: center 65%; }
+        .part-brow { z-index: 7; }
         
         #layer-hair-front { z-index: 10; }
 
         #controls { position: absolute; bottom: 30px; text-align: center; z-index: 999; }
         .btn { padding: 15px 40px; background: #00d4ff; color: #000; border: none; border-radius: 50px; font-weight: bold; font-size: 1.1rem; cursor: pointer; box-shadow: 0 0 15px rgba(0, 212, 255, 0.4); transition: 0.1s;}
         .btn:active { transform: scale(0.95); }
-        
         #webcam { position: absolute; top: 20px; right: 20px; width: 100px; height: 130px; border-radius: 8px; transform: scaleX(-1); opacity: 0.3; z-index: 999; pointer-events: none;}
     </style>
     
@@ -100,14 +108,8 @@
             const browL = document.getElementById("eye_l_brow"); const browR = document.getElementById("eye_r_brow");
             const mouthClose = document.getElementById("mouth_close"); const mouthOpen = document.getElementById("mouth_open");
 
-            // --- スムージング用の変数 ---
             let sYaw = 0, sPitch = 0, sRoll = 0;
             let sEarL = 0.15, sEarR = 0.15, sJaw = 0;
-            
-            // --- 現在の開閉状態を記憶する変数（ヒステリシス用） ---
-            let isEyeLOpen = true;
-            let isEyeROpen = true;
-            let isMouthOpen = false;
 
             startBtn.addEventListener("click", async () => {
                 startBtn.disabled = true; statusText.textContent = "AIモデル読み込み中...";
@@ -117,7 +119,7 @@
                     faceMesh.onResults(onResults);
                     const camera = new Camera(video, { onFrame: async () => { await faceMesh.send({image: video}); }, width: 480, height: 640 });
                     await camera.start();
-                    video.style.display = "block"; startBtn.style.display = "none"; statusText.textContent = "稼働中 (滑らか補間モード)";
+                    video.style.display = "block"; startBtn.style.display = "none"; statusText.textContent = "稼働中 (モーフィング対応版)";
                 } catch (error) {
                     statusText.textContent = "カメラエラー";
                 }
@@ -128,59 +130,73 @@
             function onResults(results) {
                 if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
                     const lms = results.multiFaceLandmarks[0];
-                    
                     const faceW = getDist(lms[234], lms[454]);
                     const faceH = getDist(lms[10], lms[152]);
                     const midX = (lms[234].x + lms[454].x) / 2;
                     const midY = (lms[10].y + lms[152].y) / 2;
                     
-                    // --- 1. ノイズ除去（スムージング処理） ---
-                    // カメラの生データに対して 30% ずつ近づけることで、ブレを吸収する
                     const smoothFactor = 0.3;
-                    
                     sYaw += (((lms[4].x - midX) / faceW) - sYaw) * smoothFactor;
                     sPitch += (((lms[4].y - midY) / faceH - 0.1) - sPitch) * smoothFactor;
                     sRoll += ((-Math.atan2(lms[263].y - lms[33].y, lms[263].x - lms[33].x) * (180 / Math.PI)) - sRoll) * smoothFactor;
 
-                    // --- 2. 首と体の連動（首が座っているのを解消） ---
-                    // 頭の動きに対して、首は40%、体は10%だけ追従させることで背骨のしなりを表現
+                    // 【改善2】 首の曲がりすぎを解消 (0.4 -> 0.15 に大幅減)
                     headGroup.style.transform = `rotate(${sRoll}deg) translate(${sYaw * 15}px, ${sPitch * 15}px)`;
-                    neck.style.transform = `rotate(${sRoll * 0.4}deg) translate(${sYaw * 6}px, ${sPitch * 6}px)`;
-                    body.style.transform = `rotate(${sRoll * 0.1}deg) translate(${sYaw * 2}px, ${sPitch * 2}px)`;
+                    neck.style.transform = `rotate(${sRoll * 0.15}deg) translate(${sYaw * 6}px, ${sPitch * 6}px)`;
+                    body.style.transform = `rotate(${sRoll * 0.05}deg) translate(${sYaw * 2}px, ${sPitch * 2}px)`;
                     
                     hairBack.style.transform = `translate(${sYaw * -20}px, ${sPitch * -10}px)`;
                     face.style.transform = `translate(${sYaw * 5}px, ${sPitch * 5}px)`;
                     nose.style.transform = `translate(${sYaw * 25}px, ${sPitch * 20}px)`;
                     hairFront.style.transform = `translate(${sYaw * 40}px, ${sPitch * 25}px)`;
 
-                    const partsTransform = `translate(${sYaw * 15}px, ${sPitch * 15}px)`;
-                    eyeLOpen.style.transform = partsTransform; eyeLClose.style.transform = partsTransform;
-                    eyeROpen.style.transform = partsTransform; eyeRClose.style.transform = partsTransform;
-                    mouthClose.style.transform = partsTransform; mouthOpen.style.transform = partsTransform;
+                    // ==========================================
+                    // 【改善3】 目と口の滑らかな歪み（モーフィング）処理
+                    // ==========================================
+                    const partsXY = `translate(${sYaw * 15}px, ${sPitch * 15}px)`;
 
-                    // --- 3. 目のヒステリシス処理（かくつき解消） ---
+                    // --- 左目の処理 ---
                     sEarL += ((getDist(lms[159], lms[145]) / getDist(lms[133], lms[33])) - sEarL) * smoothFactor;
+                    // 開き具合を 0(完全閉) ～ 1(全開) の割合に変換
+                    const ratioEyeL = Math.max(0, Math.min(1, (sEarL - 0.09) / 0.05));
+                    
+                    if (ratioEyeL <= 0.1) {
+                        // ほぼ閉じている時は close 画像のみ表示
+                        eyeLOpen.style.opacity = 0; eyeLClose.style.opacity = 1;
+                        eyeLClose.style.transform = partsXY;
+                    } else {
+                        // 開いている間は open 画像を縦に潰して（scaleY）表示
+                        eyeLOpen.style.opacity = 1; eyeLClose.style.opacity = 0;
+                        eyeLOpen.style.transform = `${partsXY} scaleY(${ratioEyeL})`;
+                    }
+
+                    // --- 右目の処理 ---
                     sEarR += ((getDist(lms[386], lms[374]) / getDist(lms[362], lms[263])) - sEarR) * smoothFactor;
+                    const ratioEyeR = Math.max(0, Math.min(1, (sEarR - 0.09) / 0.05));
                     
-                    // 「閉じる」時と「開く」時のラインを変えることで、パカパカを防ぐ
-                    if (isEyeLOpen && sEarL < 0.11) isEyeLOpen = false;       // 深く閉じたら「閉」
-                    else if (!isEyeLOpen && sEarL > 0.13) isEyeLOpen = true;  // しっかり開けたら「開」
-                    
-                    if (isEyeROpen && sEarR < 0.11) isEyeROpen = false;
-                    else if (!isEyeROpen && sEarR > 0.13) isEyeROpen = true;
+                    if (ratioEyeR <= 0.1) {
+                        eyeROpen.style.opacity = 0; eyeRClose.style.opacity = 1;
+                        eyeRClose.style.transform = partsXY;
+                    } else {
+                        eyeROpen.style.opacity = 1; eyeRClose.style.opacity = 0;
+                        eyeROpen.style.transform = `${partsXY} scaleY(${ratioEyeR})`;
+                    }
 
-                    eyeLOpen.style.opacity = isEyeLOpen ? 1 : 0; eyeLClose.style.opacity = isEyeLOpen ? 0 : 1;
-                    eyeROpen.style.opacity = isEyeROpen ? 1 : 0; eyeRClose.style.opacity = isEyeROpen ? 0 : 1;
-
-                    // --- 4. 口のヒステリシス処理（かくつき解消） ---
+                    // --- 口の処理 ---
                     sJaw += ((getDist(lms[13], lms[14]) / faceH) - sJaw) * smoothFactor;
+                    const ratioMouth = Math.max(0, Math.min(1, (sJaw - 0.02) / 0.05));
                     
-                    if (!isMouthOpen && sJaw > 0.04) isMouthOpen = true;      // しっかり開いたら「開」
-                    else if (isMouthOpen && sJaw < 0.02) isMouthOpen = false; // ちゃんと閉じたら「閉」
+                    if (ratioMouth <= 0.1) {
+                        // 閉じている時は close 画像
+                        mouthOpen.style.opacity = 0; mouthClose.style.opacity = 1;
+                        mouthClose.style.transform = partsXY;
+                    } else {
+                        // 開くにつれて open 画像が縦に伸びる
+                        mouthOpen.style.opacity = 1; mouthClose.style.opacity = 0;
+                        mouthOpen.style.transform = `${partsXY} scaleY(${ratioMouth})`;
+                    }
 
-                    mouthClose.style.opacity = isMouthOpen ? 0 : 1; mouthOpen.style.opacity = isMouthOpen ? 1 : 0;
-
-                    // --- 5. 眉毛の上下（ノイズ除去適用済み） ---
+                    // --- 眉毛の処理 ---
                     const browElev = (lms[159].y - lms[105].y) / faceH;
                     const bY = (0.13 - browElev) * 200;
                     browL.style.transform = `translate(${sYaw * 15}px, ${sPitch * 15 + bY}px)`;
