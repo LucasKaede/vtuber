@@ -200,26 +200,29 @@
                     else { eyeROpen.style.opacity = 1; eyeRClose.style.opacity = 0; eyeROpen.style.transform = `${partsXY} scaleY(${currentScaleR})`; }
 
                     // =====================================
-                    // 1. 口の横幅（い・お）の過剰トラッキング
+                    // 1. 口の形（い・お）の判定：丸さ（アスペクト比）でキャッチ
                     // =====================================
                     sMouthW += ((getDist(lms[61], lms[291]) / faceW) - sMouthW) * smoothFactor;
                     
+                    // 【新技術：口の丸さ検知】 縦の開き(sJaw) ÷ 横幅(sMouthW)
+                    // 通常の「あ」は口が横にも広がるため数値は低めですが、
+                    // 「お」や「う」のように口を丸くすると、比率が跳ね上がります。
+                    let mouthRoundness = sJaw / sMouthW;
+                    
                     let targetScaleXMouth = 1.0;
                     
-                    // 【お・う 行の過剰キャッチ】
-                    // 以前(0.19)より判定を甘くし(0.195)、少しでもすぼめたら即座に反応させます。
-                    // 変形量は 0.8 から「0.45（本来の横幅の半分以下）」という極端なタコ口に潰します。
-                    if (sMouthW < 0.195) {
-                        targetScaleXMouth = 0.45; 
+                    // 【丸い口の絶対キャッチ】
+                    // 比率が0.14を超えたら（口が丸みを帯びたら）、問答無用でタコ口にする
+                    if (mouthRoundness > 0.14) { 
+                        targetScaleXMouth = 0.4; // 中心にギュッとすぼめる
                     } 
-                    // 【い・え 行の過剰キャッチ】
-                    // 少し口角を横に引いただけで反応させます。
-                    // 変形量は 1.15 から「1.35（本来の1.35倍）」まで大きく引き伸ばします。
-                    else if (sMouthW > 0.225) {
-                        targetScaleXMouth = 1.35;
+                    // 【横引き（い）の判定】
+                    // 通常の「あ」で引っ張られて中心がズレるのを防ぐため、閾値を厳しく設定。
+                    // 思いっきり横に「イーッ」と引いた時だけ、ズレない程度に少しだけ伸ばす。
+                    else if (sMouthW > 0.25) {
+                        targetScaleXMouth = 1.1; // 1.35の過剰変形は廃止
                     }
 
-                    // 横幅の変形スピードも、縦幅の俊敏さに負けないように爆速（0.4 → 0.75）にアップ
                     currentScaleXMouth += (targetScaleXMouth - currentScaleXMouth) * 0.75;
 
                     // 2. 音量のカーブ化（開きっぱなし防止）
